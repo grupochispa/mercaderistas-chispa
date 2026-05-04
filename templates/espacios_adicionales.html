@@ -3,7 +3,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Espacios Adicionales — CAPTA</title>
+<title>Espacios Adicionales — CHISPA</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script>tailwind.config={darkMode:'class'}</script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -685,7 +685,7 @@ function exportXLS() {
     }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(agr), 'Agrupado');
 
-    XLSX.writeFile(wb, `CAPTA_Espacios_${desde}_${hasta}.xlsx`);
+    XLSX.writeFile(wb, `CHISPA_Espacios_${desde}_${hasta}.xlsx`);
   } catch(e) { console.error(e); alert('Error al exportar.'); }
 }
 

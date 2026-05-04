@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CAPTA — Dashboard</title>
+  <title>CHISPA — Dashboard</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -1126,7 +1126,7 @@ function exportToXLSX() {
       'Coords Cliente': g.client_coords || '',
     }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Visitas');
-    XLSX.writeFile(wb, `capta_visitas_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.writeFile(wb, `chispa_visitas_${new Date().toISOString().split('T')[0]}.xlsx`);
   } catch(e) { console.error(e); alert('Error al exportar.'); }
 }
 
@@ -1148,7 +1148,7 @@ function exportToCSV() {
   const blob = new Blob(['\uFEFF' + csv], { type:'text/csv;charset=utf-8;' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
-  a.href = url; a.download = `capta_visitas_${new Date().toISOString().split('T')[0]}.csv`;
+  a.href = url; a.download = `chispa_visitas_${new Date().toISOString().split('T')[0]}.csv`;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }

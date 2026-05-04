@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CAPTA — Acceso al Sistema</title>
+<title>CHISPA — Acceso al Sistema</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800;900&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap" rel="stylesheet">
@@ -473,7 +473,7 @@ footer{
             <i class="fas fa-chart-line"></i>
           </div>
           <div class="hero-logo-text">
-            <span class="hero-logo-name">CAPTA</span>
+            <span class="hero-logo-name">CHISPA</span>
             <span class="hero-logo-sub">Field Intelligence</span>
           </div>
         </div>
@@ -580,7 +580,7 @@ footer{
     </div>
     <div style="background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.3);border-radius:10px;padding:12px 16px;margin-bottom:20px;font-size:.78rem;color:#a5b4fc">
       <i class="fas fa-headset" style="margin-right:6px"></i>
-      Contacta al administrador de CAPTA para regularizar tu cuenta
+      Contacta al administrador de CHISPA para regularizar tu cuenta
     </div>
     <button onclick="document.getElementById('modalBloqueo').style.display='none'" 
       style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#fff;padding:10px 24px;border-radius:8px;cursor:pointer;font-size:.84rem">
@@ -612,8 +612,8 @@ footer{
 
 <!-- ── Footer ──────────────────────────────────────────────────── -->
 <footer>
-  <p class="footer-brand"><span>CAPTA</span> · Field Intelligence Platform</p>
-  <p class="footer-copy">© {{ now.year if now else 2025 }} CAPTA C.A. — Todos los derechos reservados</p>
+  <p class="footer-brand"><span>CHISPA</span> · Field Intelligence Platform</p>
+  <p class="footer-copy">© {{ now.year if now else 2025 }} Arrocera Chispa — Todos los derechos reservados</p>
   <p class="footer-dev">
     <i class="fas fa-code" style="font-size:.65rem"></i>
     Desarrollado por <a href="#" target="_blank" rel="noopener">archyss-dev</a>
@@ -684,7 +684,7 @@ document.getElementById('loginForm').addEventListener('submit', function(e) {
 
   if (err === 'bloqueada') {
     titulo.textContent = '🔒 Cuenta bloqueada';
-    msg.innerHTML = 'Tu cuenta ha sido <strong style="color:#f43f5e">bloqueada por incumplimiento de pago</strong>.<br><br>Comunícate con la administración de CAPTA para regularizar tu situación y reactivar el servicio.';
+    msg.innerHTML = 'Tu cuenta ha sido <strong style="color:#f43f5e">bloqueada por incumplimiento de pago</strong>.<br><br>Comunícate con la administración de CHISPA para regularizar tu situación y reactivar el servicio.';
     modal.style.display = 'flex';
 
   } else if (err === 'suspendida') {

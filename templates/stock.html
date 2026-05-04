@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Control de Stock — CAPTA</title>
+<title>Control de Stock — CHISPA</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -1283,7 +1283,7 @@ function exportXLS() {
     if (detalle.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detalle), 'Detalle');
 
     if (!wb.SheetNames.length) { alert('Sin datos para exportar.'); return; }
-    XLSX.writeFile(wb, `CAPTA_Stock_${desde}_${hasta}.xlsx`);
+    XLSX.writeFile(wb, `CHISPA_Stock_${desde}_${hasta}.xlsx`);
   } catch(e) { console.error(e); alert('Error al exportar.'); }
 }
 

@@ -1,4 +1,4 @@
-{# CAPTA — navbar.html universal v4 — con sistema de alertas de cuenta #}
+{# CHISPA — navbar.html universal v4 — con sistema de alertas de cuenta #}
 <script>
 (function(){var t=localStorage.getItem('sp-theme'),s=window.matchMedia('(prefers-color-scheme:dark)').matches;if(t==='dark'||((!t)&&s))document.documentElement.classList.add('dark');})();
 </script>
@@ -138,7 +138,7 @@
   <div class="sp-nav-inner">
     <a href="/dashboard" class="sp-logo">
       <div class="sp-logo-icon"><i class="fas fa-bolt"></i></div>
-      <div><div class="sp-logo-name">CAPTA</div><div class="sp-logo-co" id="navEmpresa">—</div></div>
+      <div><div class="sp-logo-name">CHISPA</div><div class="sp-logo-co" id="navEmpresa">—</div></div>
     </a>
 
     <div class="sp-nav-links" id="navLinks">
@@ -226,7 +226,7 @@
     <div class="capta-bloqueo-msg" id="captaModalMsg"></div>
     <div class="capta-bloqueo-contacto">
       <i class="fas fa-headset"></i>
-      Comunícate con la administración de <strong>CAPTA</strong> para regularizar
+      Comunícate con la administración de <strong>CHISPA</strong> para regularizar
       tu cuenta y reactivar el servicio.
     </div>
     <button class="capta-bloqueo-btn" onclick="captaLogout(event)">
@@ -241,7 +241,7 @@
   <div class="sp-drawer-panel">
     <div class="sp-logo" style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--brd)">
       <div class="sp-logo-icon"><i class="fas fa-bolt"></i></div>
-      <div><div class="sp-logo-name">CAPTA</div><div class="sp-logo-co" id="drawerEmpresa">—</div></div>
+      <div><div class="sp-logo-name">CHISPA</div><div class="sp-logo-co" id="drawerEmpresa">—</div></div>
     </div>
     <div style="margin-bottom:10px">
       <div class="sp-label" style="margin-bottom:5px"><i class="fas fa-layer-group"></i> Filtrar por línea</div>
@@ -285,7 +285,7 @@
 </div>
 
 <script>
-/* ── CAPTA NAV v4 — con sistema de alertas de cuenta ── */
+/* ── CHISPA NAV v4 — con sistema de alertas de cuenta ── */
 
 window.db = null;
 let _captaLineas = [];
@@ -394,7 +394,7 @@ async function _checkCuentaStatus() {
     }
 
   } catch(e) {
-    console.warn('CAPTA: no se pudo verificar estado de cuenta', e);
+    console.warn('CHISPA: no se pudo verificar estado de cuenta', e);
   }
 }
 
@@ -438,7 +438,7 @@ async function _applyModules(empresaId) {
     _checkNavOverflow();
 
   } catch(e) {
-    console.warn('CAPTA: no se pudieron cargar módulos', e);
+    console.warn('CHISPA: no se pudieron cargar módulos', e);
     if (document.getElementById('navLinks'))
       document.getElementById('navLinks').classList.remove('loading-mods');
   }
@@ -463,7 +463,7 @@ async function _initSupabase() {
     await _checkCuentaStatus();
 
   } catch(e) {
-    console.error('CAPTA: error inicializando Supabase', e);
+    console.error('CHISPA: error inicializando Supabase', e);
     window.location.href = '/';
   }
 }
