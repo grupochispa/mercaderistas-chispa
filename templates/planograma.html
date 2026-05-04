@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Planograma — CAPTA</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+<style>
+  body { font-family: 'Inter', 'Segoe UI', sans-serif; }
+
+  /* ── Tarjeta de línea ── */
+  .linea-card {
+    transition: transform .2s ease, box-shadow .2s ease;
+    cursor: pointer;
+  }
+  .linea-card:hover { transform: translateY(-4px); box-shadow: 0 12px 40px rgba(79,70,229,.18); }
+
+  /* ── Drop zone ── */
+  .drop-zone {
+    border: 2.5px dashed #a5b4fc;
+    transition: all .2s;
+    cursor: pointer;
+  }
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: #4F46E5;
+    background: rgba(79,70,229,.05);
+  }
+  .dark .drop-zone { border-color: #4338ca; }
+  .dark .drop-zone:hover { border-color: #818cf8; background: rgba(99,102,241,.08); }
+
+  /* ── Imagen con overlay ── */
+  .img-container { position: relative; overflow: hidden; border-radius: 12px; }
+  .img-overlay {
+    position: absolute; inset: 0;
+    background: rgba(0,0,0,0);
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    transition: background .2s;
+  }
+  .img-container:hover .img-overlay { background: rgba(0,0,0,.5); }
+  .img-overlay button {
+    opacity: 0; transform: scale(.85); transition: all .2s;
+    padding: 8px 14px; border-radius: 10px; font-size: .78rem; font-weight: 700;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .img-container:hover .img-overlay button { opacity: 1; transform: scale(1); }
+
+  /* ── Lightbox ── */
+  .lightbox {
+    position: fixed; inset: 0; z-index: 9999;
+    background: rgba(0,0,0,.92);
+    display: none; align-items: center; justify-content: center;
+    cursor: zoom-out;
+  }
+  .lightbox.open { display: flex; }
+  .lightbox img { max-width: 92vw; max-height: 88vh; border-radius: 12px; object-fit: contain; }
+
+  /* ── Modal upload ── */
+  .modal-overlay {
+    position: fixed; inset: 0; z-index: 500;
+    background: rgba(0,0,0,.65); backdrop-filter: blur(6px);
+    display: none; align-items: center; justify-content: center; padding: 1rem;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-box {
+    background: white; border-radius: 24px;
+    width: min(600px, 95vw); max-height: 90vh; overflow-y: auto;
+    box-shadow: 0 24px 64px rgba(0,0,0,.35);
+  }
+  .dark .modal-box { background: #1e293b; }
+
+  /* ── Progress bar ── */
+  .progress-bar { height: 6px; border-radius: 99px; background: #e5e7eb; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 99px; background: #4F46E5; transition: width .3s ease; }
+  .dark .progress-bar { background: #334155; }
+
+  /* ── Toast ── */
+  #toast {
+    position: fixed; bottom: 24px; right: 24px; z-index: 9998;
+    padding: 12px 20px; border-radius: 12px; font-size: .85rem; font-weight: 600;
+    color: white; box-shadow: 0 8px 24px rgba(0,0,0,.25);
+    transform: translateY(80px); opacity: 0; transition: all .3s ease;
+    display: flex; align-items: center; gap: 8px;
+    pointer-events: none;
+  }
+  #toast.show { transform: translateY(0); opacity: 1; }
+  #toast.success { background: #059669; }
+  #toast.error   { background: #dc2626; }
+  #toast.info    { background: #4F46E5; }
+
+  select:focus, input:focus { outline: none; box-shadow: 0 0 0 3px rgba(79,70,229,.2); border-color: #4F46E5 !important; }
+</style>
+<script>tailwind.config = { darkMode: 'class' }</script>
+</head>
+<body class="bg-gray-50 dark:bg-slate-900 text-gray-900 dark:text-gray-100 min-h-screen">
+
+{% include 'navbar.html' %}
+
+<div class="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+  <!-- ── Encabezado ── -->
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+    <div>
+      <h1 class="text-3xl font-extrabold text-gray-800 dark:text-white flex items-center gap-3">
+        <span class="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/50 rounded-xl flex items-center justify-center">
+          <i class="fas fa-th-large text-indigo-600 dark:text-indigo-400"></i>
+        </span>
+        Planogramas
+      </h1>
+      <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+        Imagen de referencia de anaquel por línea. Los promotores pueden verlos desde la app móvil.
+      </p>
+    </div>
+    <!-- Buscador -->
+    <div class="relative w-full sm:w-64">
+      <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+      <input id="searchInput" type="text" placeholder="Buscar línea..."
+        class="w-full pl-9 pr-4 h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-800 dark:text-white rounded-xl text-sm"
+        oninput="filtrar()">
+    </div>
+  </div>
+
+  <!-- ── KPIs ── -->
+  <div class="grid grid-cols-3 gap-4 mb-8">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 border border-gray-100 dark:border-slate-700 shadow-sm text-center">
+      <p class="text-3xl font-black text-indigo-600" id="kpiTotal">—</p>
+      <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 font-medium">Líneas totales</p>
+    </div>
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 border border-gray-100 dark:border-slate-700 shadow-sm text-center">
+      <p class="text-3xl font-black text-green-600" id="kpiCon">—</p>
+      <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 font-medium">Con planograma</p>
+    </div>
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 border border-gray-100 dark:border-slate-700 shadow-sm text-center">
+      <p class="text-3xl font-black text-amber-500" id="kpiSin">—</p>
+      <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 font-medium">Sin planograma</p>
+    </div>
+  </div>
+
+  <!-- ── Filtro rápido ── -->
+  <div class="flex gap-2 mb-6 flex-wrap">
+    <button onclick="setFiltro('todos', this)"
+      class="filtro-btn active px-4 py-2 rounded-xl text-sm font-semibold border border-indigo-500 bg-indigo-600 text-white transition-all">
+      Todas
+    </button>
+    <button onclick="setFiltro('con', this)"
+      class="filtro-btn px-4 py-2 rounded-xl text-sm font-semibold border border-gray-300 dark:border-slate-600 text-gray-600 dark:text-gray-400 hover:border-indigo-400 hover:text-indigo-600 bg-white dark:bg-slate-800 transition-all">
+      <i class="fas fa-check-circle text-green-500 mr-1.5"></i>Con planograma
+    </button>
+    <button onclick="setFiltro('sin', this)"
+      class="filtro-btn px-4 py-2 rounded-xl text-sm font-semibold border border-gray-300 dark:border-slate-600 text-gray-600 dark:text-gray-400 hover:border-amber-400 hover:text-amber-600 bg-white dark:bg-slate-800 transition-all">
+      <i class="fas fa-exclamation-circle text-amber-500 mr-1.5"></i>Sin planograma
+    </button>
+  </div>
+
+  <!-- ── Aviso de instrucciones ── -->
+  <div id="avisoInstrucciones"
+    class="hidden mb-6 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-2xl p-4 flex items-start gap-3">
+    <i class="fas fa-info-circle text-blue-500 text-lg mt-0.5 flex-shrink-0"></i>
+    <div class="text-sm text-blue-700 dark:text-blue-300">
+      <strong>Cómo subir un planograma:</strong> Haz clic en cualquier tarjeta para subir o cambiar la imagen.
+      Los promotores podrán verla desde la app móvil cuando seleccionen esa línea.
+    </div>
+  </div>
+
+  <!-- ── Grid de líneas ── -->
+  <div id="gridLineas" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5"></div>
+
+  <!-- ── Estado vacío ── -->
+  <div id="emptyState" class="hidden flex flex-col items-center justify-center py-24 text-center">
+    <div class="w-20 h-20 bg-gray-100 dark:bg-slate-800 rounded-2xl flex items-center justify-center mx-auto mb-4">
+      <i class="fas fa-th-large text-4xl text-gray-300 dark:text-gray-600"></i>
+    </div>
+    <p class="text-lg font-bold text-gray-500 dark:text-gray-400">Sin líneas encontradas</p>
+    <p class="text-sm text-gray-400 dark:text-gray-500 mt-1">Ajusta el filtro o la búsqueda</p>
+  </div>
+
+  <!-- ── Loading ── -->
+  <div id="loadingState" class="flex flex-col items-center justify-center py-24 text-center">
+    <i class="fas fa-spinner fa-spin text-indigo-400 text-4xl mb-4"></i>
+    <p class="text-gray-500 dark:text-gray-400">Cargando líneas...</p>
+  </div>
+
+</div><!-- /container -->
+
+<!-- ═══════════════ MODAL UPLOAD ═══════════════ -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal-box">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between px-6 py-5 border-b border-gray-100 dark:border-slate-700">
+      <div>
+        <h2 class="text-lg font-extrabold text-gray-900 dark:text-white" id="modalNombre">—</h2>
+        <p class="text-xs text-gray-400 mt-0.5" id="modalEstado">—</p>
+      </div>
+      <button onclick="cerrarModal()"
+        class="w-9 h-9 flex items-center justify-center rounded-xl bg-gray-100 dark:bg-slate-700 hover:bg-red-100 dark:hover:bg-red-900/40 hover:text-red-500 transition-all">
+        <i class="fas fa-times text-gray-500"></i>
+      </button>
+    </div>
+
+    <div class="p-6 space-y-5">
+
+      <!-- Imagen actual (si tiene) -->
+      <div id="imgActualWrap" class="hidden">
+        <p class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3 flex items-center gap-2">
+          <i class="fas fa-image text-indigo-400"></i> Planograma actual
+        </p>
+        <div class="rounded-2xl overflow-hidden border-2 border-indigo-100 dark:border-indigo-800 bg-gray-50 dark:bg-slate-900 relative group">
+          <img id="imgActual" src="" alt="Planograma actual"
+            class="w-full max-h-72 object-contain cursor-zoom-in"
+            onclick="abrirLightbox(this.src)">
+          <div class="absolute top-2 right-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button onclick="abrirLightbox(document.getElementById('imgActual').src)"
+              class="bg-black/50 text-white text-xs px-3 py-1.5 rounded-lg font-semibold hover:bg-black/70 transition-all">
+              <i class="fas fa-expand-alt mr-1"></i>Ampliar
+            </button>
+          </div>
+        </div>
+        <p class="text-xs text-gray-400 text-center mt-2">Haz clic en la imagen para ampliarla</p>
+      </div>
+
+      <!-- Drop zone -->
+      <div>
+        <p class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3 flex items-center gap-2">
+          <i class="fas fa-cloud-upload-alt text-indigo-400"></i>
+          <span id="uploadLabel">Subir planograma</span>
+        </p>
+
+        <div id="dropZone"
+          class="drop-zone rounded-2xl p-8 text-center relative"
+          onclick="document.getElementById('fileInput').click()"
+          ondragover="handleDragOver(event)"
+          ondragleave="handleDragLeave(event)"
+          ondrop="handleDrop(event)">
+          <i class="fas fa-image text-5xl text-indigo-300 dark:text-indigo-600 mb-4 block"></i>
+          <p class="text-base font-bold text-gray-700 dark:text-gray-300 mb-1">Arrastra aquí tu imagen</p>
+          <p class="text-sm text-gray-400">o haz clic para seleccionar</p>
+          <p class="text-xs text-gray-300 dark:text-gray-500 mt-2">JPG · PNG · WEBP · máx. 8 MB</p>
+          <input type="file" id="fileInput" accept="image/*" class="hidden" onchange="handleFileSelect(this)">
+        </div>
+      </div>
+
+      <!-- Preview antes de guardar -->
+      <div id="previewWrap" class="hidden">
+        <p class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3 flex items-center gap-2">
+          <i class="fas fa-eye text-green-400"></i> Vista previa — antes de guardar
+        </p>
+        <div class="relative rounded-2xl overflow-hidden border-2 border-green-300 dark:border-green-800">
+          <img id="previewImg" class="w-full max-h-72 object-contain bg-gray-50 dark:bg-slate-900">
+          <button onclick="cancelarPreview()"
+            class="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="flex gap-3 mt-4">
+          <button onclick="subirImagen()"
+            class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2 text-sm">
+            <i class="fas fa-save"></i> Guardar planograma
+          </button>
+          <button onclick="cancelarPreview()"
+            class="px-5 bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 text-gray-600 dark:text-gray-300 font-semibold rounded-xl transition-all text-sm">
+            Cancelar
+          </button>
+        </div>
+      </div>
+
+      <!-- Progreso de subida -->
+      <div id="progressWrap" class="hidden">
+        <div class="flex items-center gap-3 mb-3">
+          <i class="fas fa-spinner fa-spin text-indigo-500 text-lg"></i>
+          <span class="font-semibold text-indigo-600 dark:text-indigo-400 text-sm" id="progressLabel">Subiendo imagen...</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" id="progressFill" style="width:0%"></div>
+        </div>
+        <p class="text-xs text-gray-400 mt-2">No cierres esta ventana...</p>
+      </div>
+
+      <!-- Eliminar planograma (solo si tiene imagen) -->
+      <div id="deleteWrap" class="hidden pt-2 border-t border-gray-100 dark:border-slate-700">
+        <button onclick="confirmarEliminar()"
+          class="w-full text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 font-semibold py-2 rounded-xl transition-all text-sm flex items-center justify-center gap-2">
+          <i class="fas fa-trash-alt"></i> Eliminar planograma actual
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ LIGHTBOX ═══════════════ -->
+<div class="lightbox" id="lightbox" onclick="cerrarLightbox()">
+  <img id="lightboxImg" src="" alt="Planograma">
+  <button onclick="cerrarLightbox()" class="absolute top-4 right-4 w-10 h-10 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center text-white text-lg font-bold transition-all">
+    <i class="fas fa-times"></i>
+  </button>
+</div>
+
+<!-- ═══════════════ TOAST ═══════════════ -->
+<div id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════════════════
+//  CONFIG
+// ══════════════════════════════════════════════════════════
+const empresaId  = localStorage.getItem('empresa_id');
+if (!empresaId) window.location.replace('/');
+
+// URL de Supabase — hardcodeada para evitar dependencia de variables Jinja2
+const SUPABASE_URL = 'https://djjylikkocemrlsjxscr.supabase.co';
+const BUCKET       = 'visits_photos';
+
+// ── Helper: obtener la anon key real desde el cliente ya instanciado
+// window.db es el cliente Supabase del navbar — necesitamos su key para Storage
+function getSupabaseKey() {
+  try {
+    const h = window.db?.rest?.headers || window.db?.headers || {};
+    return h['apikey'] || h['Authorization']?.replace('Bearer ','');
+  } catch { return null; }
+}
+
+// ── Upload a Storage via fetch (más confiable que el SDK para archivos)
+async function uploadToStorage(path, file) {
+  const key = getSupabaseKey();
+  const url = `${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${key}`,
+      'apikey': key,
+      'Content-Type': file.type || 'image/jpeg',
+      'x-upsert': 'true',
+    },
+    body: file,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: res.statusText }));
+    throw new Error(err.message || err.error || `Storage error ${res.status}`);
+  }
+  return await res.json();
+}
+
+// ── Delete de Storage via fetch
+async function deleteFromStorage(path) {
+  const key = getSupabaseKey();
+  const url = `${SUPABASE_URL}/storage/v1/object/${BUCKET}`;
+
+  const res = await fetch(url, {
+    method: 'DELETE',
+    headers: {
+      'Authorization': `Bearer ${key}`,
+      'apikey': key,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ prefixes: [path] }),
+  });
+  // No lanzar error si falla el delete (el archivo puede no existir)
+  return res.ok;
+}
+
+// ══════════════════════════════════════════════════════════
+//  ESTADO GLOBAL
+// ══════════════════════════════════════════════════════════
+let todasLineas  = [];   // todas las líneas de la empresa
+let lineaActual  = null; // línea abierta en el modal
+let archivoActual = null; // File pendiente de subir
+let filtroActivo = 'todos';
+
+// ══════════════════════════════════════════════════════════
+//  TOAST
+// ══════════════════════════════════════════════════════════
+let toastTimer;
+function mostrarToast(msg, tipo = 'success') {
+  const t = document.getElementById('toast');
+  t.className = `show ${tipo}`;
+  t.innerHTML = `<i class="fas fa-${tipo === 'success' ? 'check-circle' : tipo === 'error' ? 'times-circle' : 'info-circle'}"></i> ${msg}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3200);
+}
+
+// ══════════════════════════════════════════════════════════
+//  URL PÚBLICA DE IMAGEN
+// ══════════════════════════════════════════════════════════
+function imgUrl(path) {
+  if (!path) return null;
+  // Path puede venir en varios formatos:
+  // "planogramas/{empresaId}/planograma_xxx.jpg"  → nuevo formato
+  // "planogramas/planograma_xxx.jpg"              → formato viejo sin empresaId
+  // "planograma_xxx.jpg"                          → más viejo aún
+  const fullPath = path.includes('/') ? path : `planogramas/${empresaId}/${path}`;
+  return `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${fullPath}`;
+}
+
+// ══════════════════════════════════════════════════════════
+//  CARGAR LÍNEAS (ignora filtro del navbar — muestra TODAS)
+// ══════════════════════════════════════════════════════════
+async function cargar() {
+  document.getElementById('loadingState').classList.remove('hidden');
+  document.getElementById('gridLineas').classList.add('hidden');
+  document.getElementById('emptyState').classList.add('hidden');
+
+  function waitDb(fn) {
+    if (window.db) { fn(); return; }
+    const t = setInterval(() => { if (window.db) { clearInterval(t); fn(); } }, 60);
+  }
+
+  const { data, error } = await window.db
+      .from('web_lineas')
+      .select('id, nombre, planogram_image')
+      .eq('empresa_id', empresaId)
+      .order('nombre');
+
+    if (error) {
+      console.error('Error cargando líneas:', error);
+      document.getElementById('loadingState').classList.add('hidden');
+      document.getElementById('gridLineas').classList.remove('hidden');
+      document.getElementById('emptyState').classList.remove('hidden');
+      mostrarToast('Error al cargar líneas: ' + error.message, 'error');
+      return;
+    }
+
+    todasLineas = data || [];
+    document.getElementById('loadingState').classList.add('hidden');
+    document.getElementById('gridLineas').classList.remove('hidden');
+
+    document.getElementById('avisoInstrucciones').classList.remove('hidden');
+    actualizarKPIs();
+    renderGrid();
+}
+
+// ══════════════════════════════════════════════════════════
+//  KPIs
+// ══════════════════════════════════════════════════════════
+function actualizarKPIs() {
+  const con = todasLineas.filter(l => l.planogram_image).length;
+  document.getElementById('kpiTotal').textContent = todasLineas.length;
+  document.getElementById('kpiCon').textContent   = con;
+  document.getElementById('kpiSin').textContent   = todasLineas.length - con;
+}
+
+// ══════════════════════════════════════════════════════════
+//  FILTROS
+// ══════════════════════════════════════════════════════════
+function setFiltro(tipo, btn) {
+  filtroActivo = tipo;
+  document.querySelectorAll('.filtro-btn').forEach(b => {
+    b.classList.remove('active', 'border-indigo-500', 'bg-indigo-600', 'text-white');
+    b.classList.add('border-gray-300', 'dark:border-slate-600', 'text-gray-600', 'dark:text-gray-400', 'bg-white', 'dark:bg-slate-800');
+  });
+  btn.classList.add('active', 'border-indigo-500', 'bg-indigo-600', 'text-white');
+  btn.classList.remove('border-gray-300', 'dark:border-slate-600', 'text-gray-600', 'dark:text-gray-400', 'bg-white', 'dark:bg-slate-800');
+  renderGrid();
+}
+
+function filtrar() { renderGrid(); }
+
+// ══════════════════════════════════════════════════════════
+//  RENDER GRID
+// ══════════════════════════════════════════════════════════
+function renderGrid() {
+  const q = document.getElementById('searchInput').value.toLowerCase().trim();
+
+  let lineas = todasLineas.filter(l => {
+    if (q && !l.nombre.toLowerCase().includes(q)) return false;
+    if (filtroActivo === 'con' && !l.planogram_image) return false;
+    if (filtroActivo === 'sin' && l.planogram_image)  return false;
+    return true;
+  });
+
+  const grid = document.getElementById('gridLineas');
+  const empty = document.getElementById('emptyState');
+
+  if (!lineas.length) {
+    grid.innerHTML = '';
+    empty.classList.remove('hidden');
+    return;
+  }
+  empty.classList.add('hidden');
+
+  grid.innerHTML = lineas.map(l => {
+    const color   = '#4F46E5';
+    const imgPath = l.planogram_image;
+    const url     = imgUrl(imgPath);
+    const tiene   = !!url;
+
+    const badgeHtml = tiene
+      ? `<span class="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300">
+           <i class="fas fa-check-circle"></i> Disponible
+         </span>`
+      : `<span class="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+           <i class="fas fa-exclamation-circle"></i> Sin planograma
+         </span>`;
+
+    const contentHtml = tiene
+      ? `<!-- Imagen con overlay de acciones -->
+         <div class="img-container h-52 bg-gray-50 dark:bg-slate-900 mb-4">
+           <img src="${url}" alt="${l.nombre}"
+             class="w-full h-full object-contain"
+             onerror="this.src=''; this.parentElement.outerHTML=noImgHtml()">
+           <div class="img-overlay">
+             <button onclick="event.stopPropagation(); abrirLightbox('${url}')"
+               class="bg-white/90 text-gray-800 text-xs">
+               <i class="fas fa-expand-alt"></i> Ampliar
+             </button>
+             <button onclick="event.stopPropagation(); abrirModal('${l.id}')"
+               class="bg-indigo-600/90 text-white text-xs">
+               <i class="fas fa-edit"></i> Cambiar
+             </button>
+           </div>
+         </div>`
+      : `<!-- Placeholder de subida -->
+         <div class="h-52 mb-4 rounded-xl flex flex-col items-center justify-center gap-3
+           bg-gray-50 dark:bg-slate-700/50 border-2 border-dashed border-gray-300 dark:border-slate-600
+           hover:border-indigo-400 hover:bg-indigo-50/50 dark:hover:border-indigo-600 dark:hover:bg-indigo-900/10 transition-all"
+           onclick="abrirModal('${l.id}')">
+           <div class="w-14 h-14 bg-indigo-100 dark:bg-indigo-900/40 rounded-xl flex items-center justify-center">
+             <i class="fas fa-cloud-upload-alt text-2xl text-indigo-400"></i>
+           </div>
+           <div class="text-center">
+             <p class="text-sm font-bold text-gray-500 dark:text-gray-400">Subir planograma</p>
+             <p class="text-xs text-gray-400 dark:text-gray-500">Haz clic aquí</p>
+           </div>
+         </div>`;
+
+    return `
+      <div class="linea-card bg-white dark:bg-slate-800 rounded-2xl border border-gray-100 dark:border-slate-700 shadow-sm overflow-hidden"
+        onclick="abrirModal('${l.id}')">
+        <!-- Header de tarjeta -->
+        <div class="flex items-center gap-3 px-4 py-3 border-b border-gray-50 dark:border-slate-700"
+          style="border-left: 5px solid ${color}">
+          <div class="flex-1 min-w-0">
+            <p class="font-bold text-gray-800 dark:text-white text-sm truncate">${l.nombre}</p>
+          </div>
+          ${badgeHtml}
+        </div>
+        <!-- Imagen o placeholder -->
+        <div class="px-4 pt-4 pb-2">
+          ${contentHtml}
+        </div>
+        <!-- Pie de tarjeta -->
+        <div class="px-4 pb-4">
+          ${tiene
+            ? `<button onclick="event.stopPropagation(); abrirModal('${l.id}')"
+                class="w-full text-xs font-semibold py-2 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-all flex items-center justify-center gap-2">
+                <i class="fas fa-edit"></i> Cambiar imagen
+               </button>`
+            : `<button onclick="event.stopPropagation(); abrirModal('${l.id}')"
+                class="w-full text-xs font-semibold py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 transition-all flex items-center justify-center gap-2">
+                <i class="fas fa-plus"></i> Subir planograma
+               </button>`
+          }
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════════════
+//  MODAL UPLOAD
+// ══════════════════════════════════════════════════════════
+function abrirModal(lineaId) {
+  lineaActual  = todasLineas.find(l => l.id === lineaId);
+  archivoActual = null;
+  if (!lineaActual) return;
+
+  // Resetear estado del modal
+  document.getElementById('previewWrap').classList.add('hidden');
+  document.getElementById('progressWrap').classList.add('hidden');
+  document.getElementById('dropZone').classList.remove('hidden');
+  document.getElementById('fileInput').value = '';
+
+  const url = imgUrl(lineaActual.planogram_image);
+
+  // Nombre y estado
+  document.getElementById('modalNombre').textContent = lineaActual.nombre;
+
+  if (url) {
+    document.getElementById('modalEstado').innerHTML =
+      `<span class="text-green-500 font-semibold"><i class="fas fa-check-circle mr-1"></i>Planograma cargado</span>
+       · Haz clic en la imagen para ampliarla`;
+    document.getElementById('imgActual').src = url;
+    document.getElementById('imgActualWrap').classList.remove('hidden');
+    document.getElementById('uploadLabel').textContent = 'Reemplazar planograma';
+    document.getElementById('deleteWrap').classList.remove('hidden');
+  } else {
+    document.getElementById('modalEstado').innerHTML =
+      `<span class="text-amber-500 font-semibold"><i class="fas fa-exclamation-circle mr-1"></i>Sin planograma</span>
+       · Sube la imagen de referencia de anaquel`;
+    document.getElementById('imgActualWrap').classList.add('hidden');
+    document.getElementById('uploadLabel').textContent = 'Subir planograma';
+    document.getElementById('deleteWrap').classList.add('hidden');
+  }
+
+  document.getElementById('modalOverlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function cerrarModal() {
+  document.getElementById('modalOverlay').classList.remove('open');
+  document.body.style.overflow = '';
+  lineaActual  = null;
+  archivoActual = null;
+}
+
+// Cerrar al clickear overlay
+document.getElementById('modalOverlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) cerrarModal();
+});
+
+// ── Drag & Drop ──
+function handleDragOver(e) {
+  e.preventDefault();
+  document.getElementById('dropZone').classList.add('drag-over');
+}
+function handleDragLeave(e) {
+  document.getElementById('dropZone').classList.remove('drag-over');
+}
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('dropZone').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) mostrarPreview(file);
+  else mostrarToast('Archivo no válido. Usa JPG, PNG o WEBP', 'error');
+}
+function handleFileSelect(input) {
+  if (input.files[0]) mostrarPreview(input.files[0]);
+}
+
+// ── Preview ──
+function mostrarPreview(file) {
+  if (file.size > 8 * 1024 * 1024) {
+    mostrarToast('La imagen supera los 8 MB. Elige una más pequeña.', 'error');
+    return;
+  }
+  archivoActual = file;
+  const reader  = new FileReader();
+  reader.onload = e => {
+    document.getElementById('previewImg').src = e.target.result;
+    document.getElementById('previewWrap').classList.remove('hidden');
+    document.getElementById('dropZone').classList.add('hidden');
+  };
+  reader.readAsDataURL(file);
+}
+
+function cancelarPreview() {
+  archivoActual = null;
+  document.getElementById('previewWrap').classList.add('hidden');
+  document.getElementById('dropZone').classList.remove('hidden');
+  document.getElementById('fileInput').value = '';
+}
+
+// ══════════════════════════════════════════════════════════
+//  STORAGE — via fetch directo (más confiable que el SDK)
+// ══════════════════════════════════════════════════════════
+
+// Obtiene la anon key de Supabase desde el cliente ya instanciado o el template
+function getAnonKey() {
+  try {
+    // Supabase JS v2: la key está en supabaseKey o en los headers del cliente fetch
+    if (window.db?.supabaseKey) return window.db.supabaseKey;
+    // Alternativa: leer del fetch handler interno
+    const headers = window.db?.rest?.headers
+                 || window.db?.fetchHandler?.headers
+                 || window.db?._headers
+                 || {};
+    const key = headers['apikey'] || headers['Authorization']?.replace('Bearer ', '');
+    if (key) return key;
+    // Último recurso: leer del globalHeaders del cliente
+    const global = window.db?.realtime?.accessToken
+                || window.db?.auth?.currentSession?.access_token;
+    return global || null;
+  } catch { return null; }
+}
+
+async function storageUpload(storagePath, file) {
+  // Usar window.db.storage directamente — ya tiene la key internamente
+  const { error } = await window.db.storage
+    .from(BUCKET)
+    .upload(storagePath, file, { upsert: true, contentType: file.type || 'image/jpeg' });
+  if (error) throw new Error(error.message || 'Error al subir');
+}
+
+async function storageDelete(storagePath) {
+  await window.db.storage.from(BUCKET).remove([storagePath]).catch(() => {});
+}
+
+// ── Subir imagen ──
+async function subirImagen() {
+  if (!archivoActual || !lineaActual) return;
+
+  const ext      = (archivoActual.name.split('.').pop() || 'jpg').toLowerCase();
+  const filePath = `planogramas/${empresaId}/planograma_${Date.now()}.${ext}`;
+  const progFill = document.getElementById('progressFill');
+  const progLbl  = document.getElementById('progressLabel');
+  const progWrap = document.getElementById('progressWrap');
+  const prevWrap = document.getElementById('previewWrap');
+
+  prevWrap.classList.add('hidden');
+  progWrap.classList.remove('hidden');
+  animProgress(progFill, 0, 20, 300);
+  progLbl.textContent = 'Preparando...';
+
+  try {
+    // 1. Borrar imagen anterior si existe
+    if (lineaActual.planogram_image) {
+      animProgress(progFill, 20, 35, 300);
+      progLbl.textContent = 'Eliminando versión anterior...';
+      await storageDelete(lineaActual.planogram_image);
+    }
+
+    // 2. Subir nueva imagen
+    animProgress(progFill, 35, 80, 1000);
+    progLbl.textContent = 'Subiendo imagen al servidor...';
+    await storageUpload(filePath, archivoActual);
+
+    // 3. Guardar referencia en la BD
+    animProgress(progFill, 80, 93, 300);
+    progLbl.textContent = 'Guardando en base de datos...';
+
+    await new Promise((resolve, reject) => {
+      function waitDb(fn) { if (window.db) { fn(); return; } const t = setInterval(() => { if (window.db) { clearInterval(t); fn(); } }, 60); }
+      waitDb(async () => {
+        const { error } = await window.db.from('web_lineas').update({ planogram_image: filePath }).eq('id', lineaActual.id);
+        if (error) reject(error); else resolve();
+      });
+    });
+
+    animProgress(progFill, 93, 100, 200);
+    progLbl.textContent = '✓ ¡Guardado!';
+
+    // Actualizar estado local
+    const idx = todasLineas.findIndex(l => l.id === lineaActual.id);
+    if (idx >= 0) todasLineas[idx].planogram_image = filePath;
+
+    setTimeout(() => {
+      cerrarModal();
+      actualizarKPIs();
+      renderGrid();
+      mostrarToast(`Planograma de "${lineaActual.nombre}" guardado ✓`);
+    }, 500);
+
+  } catch (err) {
+    console.error('Error subiendo planograma:', err);
+    progWrap.classList.add('hidden');
+    prevWrap.classList.remove('hidden');
+    progFill.style.width = '0%';
+    mostrarToast('Error: ' + (err.message || 'Verifica tu conexión e intenta de nuevo'), 'error');
+  }
+}
+
+// ── Eliminar planograma ──
+async function confirmarEliminar() {
+  if (!lineaActual?.planogram_image) return;
+  if (!confirm(`¿Eliminar el planograma de "${lineaActual.nombre}"?\nEsta acción no se puede deshacer.`)) return;
+
+  const progWrap = document.getElementById('progressWrap');
+  const progFill = document.getElementById('progressFill');
+  const progLbl  = document.getElementById('progressLabel');
+  document.getElementById('deleteWrap').classList.add('hidden');
+  progWrap.classList.remove('hidden');
+  progLbl.textContent = 'Eliminando...';
+  animProgress(progFill, 0, 60, 400);
+
+  try {
+    await storageDelete(lineaActual.planogram_image);
+
+    animProgress(progFill, 60, 85, 300);
+    await new Promise((resolve, reject) => {
+      function waitDb(fn) { if (window.db) { fn(); return; } const t = setInterval(() => { if (window.db) { clearInterval(t); fn(); } }, 60); }
+      waitDb(async () => {
+        const { error } = await window.db.from('web_lineas').update({ planogram_image: null }).eq('id', lineaActual.id);
+        if (error) reject(error); else resolve();
+      });
+    });
+
+    const idx = todasLineas.findIndex(l => l.id === lineaActual.id);
+    if (idx >= 0) todasLineas[idx].planogram_image = null;
+
+    animProgress(progFill, 85, 100, 200);
+    progLbl.textContent = '✓ Eliminado';
+
+    setTimeout(() => {
+      cerrarModal();
+      actualizarKPIs();
+      renderGrid();
+      mostrarToast(`Planograma eliminado`, 'info');
+    }, 400);
+
+  } catch (err) {
+    progWrap.classList.add('hidden');
+    mostrarToast('Error al eliminar: ' + (err.message || ''), 'error');
+    document.getElementById('deleteWrap').classList.remove('hidden');
+  }
+}
+
+// ── Animación de progreso ──
+function animProgress(el, from, to, duration) {
+  const start   = performance.now();
+  const step    = t => {
+    const p = Math.min((t - start) / duration, 1);
+    el.style.width = (from + (to - from) * p) + '%';
+    if (p < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+// ══════════════════════════════════════════════════════════
+//  LIGHTBOX
+// ══════════════════════════════════════════════════════════
+function abrirLightbox(src) {
+  document.getElementById('lightboxImg').src = src;
+  document.getElementById('lightbox').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function cerrarLightbox() {
+  document.getElementById('lightbox').classList.remove('open');
+  document.body.style.overflow = '';
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    cerrarLightbox();
+    cerrarModal();
+  }
+});
+
+// ══════════════════════════════════════════════════════════
+//  INIT — patrón estándar del proyecto
+// ══════════════════════════════════════════════════════════
+// Ignorar el filtro de línea del navbar — planogramas siempre muestra todo
+window.onLineaChanged = () => {
+  // Limpiar filtros cuando cambia línea
+  document.getElementById('fPromotor').value = '';
+  document.getElementById('fProducto').value = '';
+  document.getElementById('fComercio').value = '';
+  document.getElementById('fComercioVal').value = '';
+  document.getElementById('fAlerta').value = '';
+  loadData().then(aplicarFiltros);
+};
+function waitDb(fn) {
+  if (window.db) { fn(); return; }
+  const t = setInterval(() => { if (window.db) { clearInterval(t); fn(); } }, 50);
+}
+
+waitDb(async () => {
+  await cargar();
+});
+</script>
+</body>
+</html>

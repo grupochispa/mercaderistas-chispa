@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Competencia — CAPTA</title>
+</head>
+<body>
+{% include 'navbar.html' %}
+
+<main class="sp-page">
+  <div class="sp-page-hdr">
+    <div>
+      <h1 class="sp-page-title">Productos de la competencia</h1>
+      <p class="sp-page-sub">Registra las presentaciones de competidores para el análisis comparativo.</p>
+    </div>
+  </div>
+
+  <div class="sp-card" style="margin-bottom:20px">
+    <p class="sp-sec-title" id="formTitle">Nueva presentación de competidor</p>
+    <form id="productForm">
+      <input type="hidden" id="product_id">
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">
+        <div style="flex:2;min-width:220px">
+          <label class="sp-label">Nombre del producto competidor *</label>
+          <input type="text" id="presentation" class="sp-input" placeholder="Ej: Rival Snack, Bebida X" required oninput="this.value=this.value.toUpperCase()">
+        </div>
+        <div style="flex:0 1 110px;min-width:90px">
+          <label class="sp-label">Gramaje</label>
+          <input type="number" id="gramaje" class="sp-input" placeholder="Ej: 100" min="0" step="0.01">
+        </div>
+        <div style="flex:0 1 100px;min-width:80px">
+          <label class="sp-label">Unidad</label>
+          <select id="unidad" class="sp-select">
+            <option value="">—</option>
+            <option value="g">g</option><option value="kg">kg</option>
+            <option value="ml">ml</option><option value="l">l</option>
+            <option value="oz">oz</option><option value="un">un</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button type="submit" id="submitButton" class="sp-btn sp-btn-primary"><i class="fas fa-plus"></i> Crear</button>
+          <button type="button" id="cancelButton" class="sp-btn sp-btn-sec" style="display:none" onclick="resetForm()"><i class="fas fa-times"></i> Cancelar</button>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <div class="sp-card">
+    <div style="margin-bottom:14px">
+      <div class="sp-search">
+        <i class="fas fa-search sp-search-ico"></i>
+        <input type="text" id="searchInput" class="sp-input" placeholder="Buscar presentación…" oninput="filterProducts()">
+      </div>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="sp-tbl" id="productsTable">
+        <thead><tr>
+          <th>Producto</th><th>Gramaje</th><th>Creado</th>
+          <th style="text-align:center">Acciones</th>
+        </tr></thead>
+        <tbody id="productsTableBody"></tbody>
+      </table>
+      <p id="loadingMessage" style="text-align:center;color:var(--muted);padding:32px 0">
+        <i class="fas fa-spinner fa-spin" style="color:var(--accent);margin-right:6px"></i>Cargando...
+      </p>
+      <p id="noResultsMessage" style="display:none;text-align:center;color:var(--muted);padding:24px 0">Sin resultados</p>
+    </div>
+  </div>
+</main>
+
+<script>
+const empresaId = localStorage.getItem('empresa_id') || await (async()=>{try{const r=await fetch('/api/dashboard/config');if(r.ok){const d=await r.json();localStorage.setItem('empresa_id',d.empresa_id);localStorage.setItem('empresa_nombre',d.empresa_nombre);return d.empresa_id;}return null;}catch{return null;}})();
+if (!empresaId) { window.location.replace('/'); throw new Error('no session'); }
+
+const H = {'Content-Type':'application/json'};
+let allProducts = [];
+
+const fmt  = s => s ? new Date(s).toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'2-digit'}) : '—';
+const fmtG = p => p.gramaje ? (p.gramaje%1===0?parseInt(p.gramaje):p.gramaje)+(p.unidad||'') : '—';
+
+async function loadProducts() {
+  document.getElementById('loadingMessage').style.display = 'block';
+  document.getElementById('productsTableBody').innerHTML = '';
+  const r = await fetch(`/api/competitorproducts?empresa_id=${empresaId}`);
+  const d = r.ok ? await r.json() : {};
+  allProducts = d.products || [];
+  document.getElementById('loadingMessage').style.display = 'none';
+  renderProducts(allProducts);
+}
+
+function renderProducts(products) {
+  const tbody = document.getElementById('productsTableBody');
+  const noMsg = document.getElementById('noResultsMessage');
+  tbody.innerHTML = ''; noMsg.style.display = 'none';
+  if (!products.length) { noMsg.style.display = 'block'; return; }
+  tbody.innerHTML = products.map(p => `<tr>
+    <td class="sp-hi">${p.presentation}</td>
+    <td style="font-weight:600;color:var(--accent)">${fmtG(p)}</td>
+    <td>${fmt(p.created_at)}</td>
+    <td style="text-align:center;white-space:nowrap">
+      <button onclick="editProduct('${p.id}')" class="sp-btn sp-btn-sec sp-btn-sm"><i class="fas fa-pen"></i></button>
+      <button onclick="deleteProduct('${p.id}')" class="sp-btn sp-btn-danger sp-btn-sm" style="margin-left:4px"><i class="fas fa-trash"></i></button>
+    </td></tr>`).join('');
+}
+
+function filterProducts() {
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  renderProducts(allProducts.filter(p => p.presentation.toLowerCase().includes(q)));
+}
+
+document.getElementById('productForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const id           = document.getElementById('product_id').value;
+  const presentation = document.getElementById('presentation').value.trim().toUpperCase();
+  const gramaje      = parseFloat(document.getElementById('gramaje').value) || null;
+  const unidad       = document.getElementById('unidad').value || null;
+  if (!presentation) return;
+  const payload = {presentation, gramaje, unidad, empresa_id: empresaId};
+  const r = id
+    ? await fetch(`/api/competitorproducts/${id}`, {method:'PATCH', headers:H, body:JSON.stringify(payload)})
+    : await fetch('/api/competitorproducts',        {method:'POST',  headers:H, body:JSON.stringify(payload)});
+  if (r.ok || r.status===201) { captaToast(id?'Actualizado':'Creado','success'); resetForm(); loadProducts(); }
+  else { const err=await r.json().catch(()=>({})); captaToast(err.error||'Error al guardar','error'); }
+});
+
+function editProduct(id) {
+  const p = allProducts.find(x => String(x.id)===String(id)); if (!p) return;
+  document.getElementById('product_id').value  = id;
+  document.getElementById('presentation').value= p.presentation;
+  document.getElementById('gramaje').value      = p.gramaje || '';
+  document.getElementById('unidad').value       = p.unidad  || '';
+  document.getElementById('formTitle').textContent = 'Editar presentación';
+  document.getElementById('submitButton').innerHTML = '<i class="fas fa-save"></i> Guardar';
+  document.getElementById('cancelButton').style.display = '';
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+async function deleteProduct(id) {
+  if (!confirm('¿Eliminar esta presentación de competidor?')) return;
+  const r = await fetch(`/api/competitorproducts/${id}?empresa_id=${empresaId}`, {method:'DELETE'});
+  if (r.ok||r.status===204) { captaToast('Eliminado','success'); loadProducts(); }
+  else captaToast('Error al eliminar','error');
+}
+
+function resetForm() {
+  ['product_id','presentation','gramaje'].forEach(id => document.getElementById(id).value='');
+  document.getElementById('unidad').value='';
+  document.getElementById('formTitle').textContent = 'Nueva presentación de competidor';
+  document.getElementById('submitButton').innerHTML = '<i class="fas fa-plus"></i> Crear';
+  document.getElementById('cancelButton').style.display = 'none';
+}
+
+window.editProduct=editProduct; window.deleteProduct=deleteProduct; window.resetForm=resetForm;
+window.addEventListener('capta:db-ready', () => loadProducts());
+</script>
+</body>
+</html>

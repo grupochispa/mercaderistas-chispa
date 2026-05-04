@@ -1,0 +1,850 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Caras en Anaquel — CAPTA</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+<style>
+  .table-header-sticky th { position:sticky; top:0; z-index:10; background:#F9FAFB; }
+  .dark .table-header-sticky th { background:#334155; color:#e2e8f0; }
+  .pct-bar  { height:8px; border-radius:99px; background:#e5e7eb; overflow:hidden; }
+  .dark .pct-bar { background:#334155; }
+  .pct-fill { height:100%; border-radius:99px; transition:width .5s; }
+  .com-dd   { position:absolute; top:100%; left:0; z-index:200; width:100%; background:white;
+    border:1px solid #e5e7eb; border-radius:8px; max-height:200px; overflow-y:auto;
+    box-shadow:0 8px 24px rgba(0,0,0,.12); }
+  .dark .com-dd { background:#1e293b; border-color:#475569; }
+  .com-dd-item { padding:8px 12px; cursor:pointer; font-size:.83rem; border-bottom:1px solid #f3f4f6; }
+  .com-dd-item:hover { background:#f0f4ff; }
+  .dark .com-dd-item:hover { background:#334155; }
+  .row-hover:hover { background:rgba(79,70,229,.04) !important; }
+  .dark .row-hover:hover { background:rgba(139,92,246,.08) !important; }
+  .sp-overlay { display:none; position:fixed; inset:0; z-index:500;
+    background:rgba(0,0,0,.6); align-items:center; justify-content:center; padding:1rem; }
+  .sp-overlay.open { display:flex; }
+  .sp-modal-box { background:white; border-radius:20px; width:min(820px,95vw);
+    max-height:90vh; overflow-y:auto; box-shadow:0 24px 60px rgba(0,0,0,.3); }
+  .dark .sp-modal-box { background:#1e293b; color:#e2e8f0; }
+  .delta-pos { background:#D1FAE5; color:#065F46; }
+  .delta-neg { background:#FEE2E2; color:#991B1B; }
+  .delta-zer { background:#F3F4F6; color:#6B7280; }
+  .dark .delta-zer { background:#334155; color:#94a3b8; }
+</style>
+<script>tailwind.config={darkMode:'class'}</script>
+</head>
+<body class="bg-gray-50 dark:bg-slate-900 text-gray-900 dark:text-gray-100 font-sans">
+
+{% include 'navbar.html' %}
+
+<div class="container mx-auto p-4 sm:p-6 lg:p-8">
+
+  <div class="mb-6">
+    <h1 class="text-3xl font-extrabold text-gray-800 dark:text-white">
+      <i class="fas fa-eye mr-2 text-indigo-500"></i>Caras en Anaquel
+    </h1>
+    <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+      Share of Shelf (SOS) &mdash; nuestras caras antes/despu&eacute;s vs. total de caras competencia.
+    </p>
+  </div>
+
+  <!-- KPIs -->
+  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-4 text-center border border-gray-100 dark:border-slate-700 shadow-sm">
+      <p class="text-2xl font-extrabold text-indigo-600" id="kSOS">&mdash;</p>
+      <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">SOS Nuestro</p>
+      <div class="pct-bar mt-2"><div class="pct-fill bg-indigo-500" id="fillSOS" style="width:0%"></div></div>
+    </div>
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-4 text-center border border-gray-100 dark:border-slate-700 shadow-sm">
+      <p class="text-2xl font-extrabold text-red-500" id="kSOSComp">&mdash;</p>
+      <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">SOS Competencia</p>
+      <div class="pct-bar mt-2"><div class="pct-fill bg-red-400" id="fillSOSComp" style="width:0%"></div></div>
+    </div>
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-4 text-center border border-gray-100 dark:border-slate-700 shadow-sm">
+      <p class="text-2xl font-extrabold text-green-600" id="kNuestrasAfter">&mdash;</p>
+      <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Nuestras despu&eacute;s</p>
+    </div>
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-4 text-center border border-gray-100 dark:border-slate-700 shadow-sm">
+      <p class="text-2xl font-extrabold text-amber-500" id="kNuestrasAntes">&mdash;</p>
+      <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Nuestras antes</p>
+    </div>
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-4 text-center border border-gray-100 dark:border-slate-700 shadow-sm">
+      <p class="text-2xl font-extrabold text-rose-500" id="kCarasComp">&mdash;</p>
+      <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Caras competencia</p>
+    </div>
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-4 text-center border border-gray-100 dark:border-slate-700 shadow-sm">
+      <p class="text-2xl font-extrabold text-emerald-600" id="kDeltaNeto">&mdash;</p>
+      <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Cambio neto caras</p>
+    </div>
+  </div>
+
+  <!-- Filtros -->
+  <div class="bg-white dark:bg-slate-800 shadow-sm rounded-2xl p-5 mb-6 border border-gray-100 dark:border-slate-700">
+    <h2 class="text-base font-bold text-gray-700 dark:text-white mb-4">Filtros</h2>
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-4">
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Desde</label>
+        <input type="date" id="fDesde" class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm" onchange="cargar()">
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Hasta</label>
+        <input type="date" id="fHasta" class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm" onchange="cargar()">
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Promotor</label>
+        <select id="fPromotor" class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm" onchange="cargar()">
+          <option value="">Todos</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Estado</label>
+        <select id="fEstado" class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm" onchange="onEstadoChange()">
+          <option value="">Todos</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Zona</label>
+        <select id="fZona" class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm" disabled onchange="cargar()">
+          <option value="">Todas</option>
+        </select>
+      </div>
+      <div class="relative" id="comercioWrap">
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Comercio</label>
+        <input type="text" id="fComercio" placeholder="Buscar&hellip;"
+          class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm"
+          oninput="buscarComercio(this.value)" onchange="cargar()" autocomplete="off">
+        <input type="hidden" id="fComercioVal">
+        <div id="comercioDD" class="com-dd" style="display:none"></div>
+      </div>
+    </div>
+    <div class="flex gap-3 border-t border-gray-100 dark:border-slate-700 pt-4">
+      <button onclick="cargar()"
+        class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-5 rounded-lg shadow transition-all flex items-center gap-2">
+        <i class="fas fa-filter"></i> Aplicar
+      </button>
+      <button onclick="limpiar()"
+        class="bg-gray-100 hover:bg-gray-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-gray-600 dark:text-gray-300 font-semibold py-2 px-4 rounded-lg transition-all flex items-center gap-2">
+        <i class="fas fa-undo"></i> Limpiar
+      </button>
+      <button onclick="exportXLS()"
+        class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 px-4 rounded-lg transition-all flex items-center gap-2 ml-auto">
+        <i class="fas fa-file-excel"></i> Exportar Excel
+      </button>
+    </div>
+  </div>
+
+  <!-- Graficos fila 1 -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 border border-gray-100 dark:border-slate-700 shadow-sm">
+      <h3 class="text-sm font-bold text-gray-700 dark:text-white mb-1">SOS &mdash; Share of Shelf</h3>
+      <p class="text-xs text-gray-400 mb-4">Nuestras caras despu&eacute;s vs. caras competencia</p>
+      <div style="position:relative;height:220px"><canvas id="chartSOS"></canvas></div>
+    </div>
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 border border-gray-100 dark:border-slate-700 shadow-sm lg:col-span-2">
+      <h3 class="text-sm font-bold text-gray-700 dark:text-white mb-1">Nuestros productos &mdash; Caras antes vs. despu&eacute;s</h3>
+      <p class="text-xs text-gray-400 mb-4">Por presentaci&oacute;n. La ganancia neta muestra el impacto del promotor.</p>
+      <div style="position:relative;height:220px"><canvas id="chartNuestros"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Graficos fila 2 -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 border border-gray-100 dark:border-slate-700 shadow-sm">
+      <h3 class="text-sm font-bold text-gray-700 dark:text-white mb-1">Competencia &mdash; Total de caras</h3>
+      <p class="text-xs text-gray-400 mb-4">
+        Solo se captura el total de caras de cada producto competidor.
+        No hay antes/despu&eacute;s para competencia.
+      </p>
+      <div style="position:relative;height:240px"><canvas id="chartComp"></canvas></div>
+    </div>
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 border border-gray-100 dark:border-slate-700 shadow-sm">
+      <h3 class="text-sm font-bold text-gray-700 dark:text-white mb-1">Evoluci&oacute;n SOS en el tiempo</h3>
+      <p class="text-xs text-gray-400 mb-4">% SOS nuestro por d&iacute;a/semana</p>
+      <div style="position:relative;height:240px"><canvas id="chartEvol"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Tablas -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl border border-gray-100 dark:border-slate-700 shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-100 dark:border-slate-700">
+        <h3 class="text-sm font-bold text-gray-700 dark:text-white">Detalle &mdash; Nuestros productos</h3>
+        <p class="text-xs text-gray-400 mt-0.5">Promedio de caras por presentaci&oacute;n en el per&iacute;odo</p>
+      </div>
+      <div class="overflow-x-auto max-h-72">
+        <table class="min-w-full divide-y divide-gray-100 dark:divide-slate-700">
+          <thead class="table-header-sticky">
+            <tr>
+              <th class="py-2 px-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Producto</th>
+              <th class="py-2 px-4 text-center text-xs font-bold text-amber-500 uppercase tracking-wider">Antes</th>
+              <th class="py-2 px-4 text-center text-xs font-bold text-green-600 uppercase tracking-wider">Despu&eacute;s</th>
+              <th class="py-2 px-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">&Delta;</th>
+              <th class="py-2 px-4 text-center text-xs font-bold text-indigo-500 uppercase tracking-wider">% del total</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyNuestros" class="bg-white dark:bg-slate-800 divide-y divide-gray-50 dark:divide-slate-700 text-sm"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="bg-white dark:bg-slate-800 rounded-2xl border border-gray-100 dark:border-slate-700 shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-100 dark:border-slate-700 flex items-center justify-between">
+        <div>
+          <h3 class="text-sm font-bold text-gray-700 dark:text-white">Detalle &mdash; Competencia</h3>
+          <p class="text-xs text-gray-400 mt-0.5">Total de caras capturadas por producto competidor</p>
+        </div>
+        <span class="text-xs bg-red-50 dark:bg-red-900/30 text-red-500 px-3 py-1 rounded-full font-semibold">
+          Solo total &middot; sin antes/despu&eacute;s
+        </span>
+      </div>
+      <div class="overflow-x-auto max-h-72">
+        <table class="min-w-full divide-y divide-gray-100 dark:divide-slate-700">
+          <thead class="table-header-sticky">
+            <tr>
+              <th class="py-2 px-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Producto</th>
+              <th class="py-2 px-4 text-center text-xs font-bold text-red-500 uppercase tracking-wider">Total caras</th>
+              <th class="py-2 px-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">% del total anaquel</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyComp" class="bg-white dark:bg-slate-800 divide-y divide-gray-50 dark:divide-slate-700 text-sm"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabla por visita -->
+  <div class="bg-white dark:bg-slate-800 rounded-2xl border border-gray-100 dark:border-slate-700 shadow-sm overflow-hidden">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-slate-700">
+      <div>
+        <h3 class="text-sm font-bold text-gray-700 dark:text-white">Detalle por visita</h3>
+        <p class="text-xs text-gray-400 mt-0.5">Clic en una fila para ver el desglose por producto</p>
+      </div>
+      <span id="infoVisitas" class="text-xs font-semibold text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 dark:text-indigo-300 px-3 py-1 rounded-full">&mdash;</span>
+    </div>
+    <div class="overflow-x-auto max-h-80">
+      <table class="min-w-full divide-y divide-gray-100 dark:divide-slate-700">
+        <thead class="table-header-sticky">
+          <tr>
+            <th class="py-2 px-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Fecha</th>
+            <th class="py-2 px-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Promotor</th>
+            <th class="py-2 px-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Comercio</th>
+            <th class="py-2 px-4 text-center text-xs font-bold text-amber-500 uppercase tracking-wider">Nuestras antes</th>
+            <th class="py-2 px-4 text-center text-xs font-bold text-green-600 uppercase tracking-wider">Nuestras despu&eacute;s</th>
+            <th class="py-2 px-4 text-center text-xs font-bold text-red-500 uppercase tracking-wider">Caras comp.</th>
+            <th class="py-2 px-4 text-center text-xs font-bold text-indigo-500 uppercase tracking-wider">SOS%</th>
+            <th class="py-2 px-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">&Delta; caras</th>
+          </tr>
+        </thead>
+        <tbody id="tbodyVisitas" class="bg-white dark:bg-slate-800 divide-y divide-gray-50 dark:divide-slate-700 text-sm"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- Modal desglose por visita -->
+<div class="sp-overlay" id="modalVisita">
+  <div class="sp-modal-box">
+    <div class="flex items-center justify-between p-6 border-b border-gray-100 dark:border-slate-700">
+      <div>
+        <h2 class="text-lg font-bold text-gray-900 dark:text-white" id="modalVTitulo">Desglose</h2>
+        <p class="text-xs text-gray-400 mt-1" id="modalVSub"></p>
+      </div>
+      <button onclick="cerrarModal()" class="text-gray-400 hover:text-red-500 text-2xl font-bold leading-none px-2">&times;</button>
+    </div>
+    <div class="p-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div>
+        <h3 class="text-sm font-bold text-gray-700 dark:text-white mb-3 flex items-center gap-2">
+          <span class="w-3 h-3 rounded-full bg-indigo-500 inline-block"></span>
+          Nuestros productos
+        </h3>
+        <div class="overflow-x-auto rounded-xl border border-gray-100 dark:border-slate-700">
+          <table class="min-w-full text-xs">
+            <thead><tr class="bg-gray-50 dark:bg-slate-700">
+              <th class="py-2 px-3 text-left font-bold text-gray-500 uppercase">Producto</th>
+              <th class="py-2 px-3 text-center font-bold text-amber-500 uppercase">Antes</th>
+              <th class="py-2 px-3 text-center font-bold text-green-600 uppercase">Despu&eacute;s</th>
+              <th class="py-2 px-3 text-center font-bold text-gray-500 uppercase">&Delta;</th>
+            </tr></thead>
+            <tbody id="modalVNuestros" class="bg-white dark:bg-slate-800 divide-y divide-gray-50 dark:divide-slate-700"></tbody>
+          </table>
+        </div>
+      </div>
+      <div>
+        <h3 class="text-sm font-bold text-gray-700 dark:text-white mb-3 flex items-center gap-2">
+          <span class="w-3 h-3 rounded-full bg-red-400 inline-block"></span>
+          Competencia <span class="text-xs font-normal text-gray-400">(solo total)</span>
+        </h3>
+        <div class="overflow-x-auto rounded-xl border border-gray-100 dark:border-slate-700">
+          <table class="min-w-full text-xs">
+            <thead><tr class="bg-gray-50 dark:bg-slate-700">
+              <th class="py-2 px-3 text-left font-bold text-gray-500 uppercase">Producto</th>
+              <th class="py-2 px-3 text-center font-bold text-red-500 uppercase">Caras</th>
+            </tr></thead>
+            <tbody id="modalVComp" class="bg-white dark:bg-slate-800 divide-y divide-gray-50 dark:divide-slate-700"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const empresaId = localStorage.getItem('empresa_id');
+if (!empresaId) window.location.replace('/');
+
+let allData  = [];
+let allZonas = [];
+let comercioTimer = null;
+let charts   = {};
+
+function fmtDate(s) {
+  return new Date(s).toLocaleDateString('es-ES', { day:'2-digit', month:'short', year:'numeric' });
+}
+function fmtShort(s) {
+  return new Date(s).toLocaleDateString('es-ES', { day:'2-digit', month:'short' });
+}
+const parseJ = window.captaParseJ;
+
+// Helper: obtener caras de un item competencia (app movil + PWA vieja)
+function getCarasComp(i) {
+  return parseFloat(i.faces) || parseFloat(i.faces_after) || parseFloat(i.facesStr) || 0;
+}
+
+const fmtProdTxt      = window.captaFmtProdTxt;
+const labelConGramaje = window.captaFmtProdTxt;
+
+let allEstados = [];
+
+async function loadCatalogs() {
+  const [{ data: promos }, { data: estados }, { data: zonas }] = await Promise.all([
+    window.db.from('web_promotores').select('promoter_name').eq('empresa_id', empresaId).order('promoter_name'),
+    window.db.from('web_estados').select('id, nombre').order('nombre'),
+    window.db.from('web_zonas').select('id, nombre, estado_id').order('nombre'),
+  ]);
+  allZonas = zonas || [];
+  allEstados = estados || [];
+  const ps = document.getElementById('fPromotor');
+  ps.innerHTML = '<option value="">Todos</option>' + (promos || []).map(p => `<option value="${p.promoter_name}">${p.promoter_name}</option>`).join('');
+  const es = document.getElementById('fEstado');
+  es.innerHTML = '<option value="">Todos</option>' + allEstados.map(e => `<option value="${e.nombre}">${e.nombre}</option>`).join('');
+}
+
+function onEstadoChange() {
+  const val = document.getElementById('fEstado').value;
+  const zSel = document.getElementById('fZona');
+  const est = allEstados.find(e => e.nombre === val);
+  zSel.innerHTML = '<option value="">Todas</option>';
+  zSel.disabled = !est;
+  if (est) {
+    allZonas.filter(z => String(z.estado_id) === String(est.id))
+      .forEach(z => zSel.innerHTML += `<option value="${z.nombre}">${z.nombre}</option>`);
+  }
+  cargar();
+}
+
+async function cargar() {
+  const loadingRow = `<tr><td colspan="8" class="text-center py-12 text-gray-400">
+    <i class="fas fa-spinner fa-spin text-indigo-400 text-2xl block mb-2"></i>Cargando...</td></tr>`;
+  ['tbodyNuestros','tbodyComp','tbodyVisitas'].forEach(id => {
+    document.getElementById(id).innerHTML = loadingRow;
+  });
+
+  const desde    = document.getElementById('fDesde').value;
+  const hasta    = document.getElementById('fHasta').value;
+  const prom     = document.getElementById('fPromotor').value;
+  const estado   = document.getElementById('fEstado').value;
+  const zona     = document.getElementById('fZona').value;
+  const comercio = document.getElementById('fComercioVal').value;
+  const lineaId  = localStorage.getItem('sp-linea') || '';
+
+  let q = window.db.from('web_precios')
+    .select('id, created_at, promoter_name, trade, state, zone, our_faces_before_counted, our_faces_after, competitor_faces, total_faces, myitems, competitoritems')
+    .eq('empresa_id', empresaId)
+    .order('created_at', { ascending: false });
+
+  if (desde)    q = q.gte('created_at', desde + 'T00:00:00+00:00');
+  if (hasta)    q = q.lte('created_at', hasta + 'T23:59:59+00:00');
+  if (prom)     q = q.eq('promoter_name', prom);
+  if (estado)   q = q.eq('state', estado);
+  if (zona)     q = q.eq('zone', zona);
+  if (comercio) q = q.eq('trade', comercio);
+  if (lineaId)  q = q.eq('linea_id', lineaId);
+
+  const { data, error } = await q;
+  if (error) {
+    ['tbodyNuestros','tbodyComp','tbodyVisitas'].forEach(id =>
+      document.getElementById(id).innerHTML =
+        `<tr><td colspan="8" class="text-center py-8 text-red-400">Error: ${error.message}</td></tr>`);
+    return;
+  }
+
+  allData = await window.captaEnrichItems(data || [], empresaId, window.db);
+  renderTodo();
+}
+
+function renderTodo() {
+  const records = allData;
+  const byProdN = {};
+  const byProdC = {};
+  let totalNuestrasAntes   = 0;
+  let totalNuestrasDespues = 0;
+  let totalCarasComp       = 0;
+  const byDay = {};
+
+  records.forEach(r => {
+    const myItems   = parseJ(r.myitems);
+    const compItems = parseJ(r.competitoritems);
+
+    let visitaNuestrasAntes   = 0;
+    let visitaNuestrasDespues = 0;
+
+    myItems.forEach(i => {
+      if (i.sin_stock) return;
+      const before = parseFloat(i.faces_before) || 0;
+      const after  = parseFloat(i.faces_after)  || 0;
+      visitaNuestrasAntes   += before;
+      visitaNuestrasDespues += after;
+      totalNuestrasAntes    += before;
+      totalNuestrasDespues  += after;
+
+      // Key con gramaje para agrupar correctamente SAL 500g vs SAL 900g
+      const key = labelConGramaje(i);
+      if (!byProdN[key]) byProdN[key] = { before: 0, after: 0, n: 0 };
+      byProdN[key].before += before;
+      byProdN[key].after  += after;
+      byProdN[key].n++;
+    });
+
+    let visitaCarasComp = 0;
+
+    if (compItems.length > 0) {
+      compItems.forEach(i => {
+        if (i.sin_stock) return;
+        const caras = getCarasComp(i);
+        visitaCarasComp += caras;
+        totalCarasComp  += caras;
+
+        // Key con gramaje para competencia
+        const key = labelConGramaje(i);
+        if (!byProdC[key]) byProdC[key] = { faces: 0, n: 0 };
+        byProdC[key].faces += caras;
+        byProdC[key].n++;
+      });
+    } else if (r.competitor_faces != null) {
+      const cf = parseFloat(r.competitor_faces) || 0;
+      visitaCarasComp += cf;
+      totalCarasComp  += cf;
+    }
+
+    const dia = fmtShort(r.created_at);
+    if (!byDay[dia]) byDay[dia] = { nAfter: 0, comp: 0 };
+    byDay[dia].nAfter += visitaNuestrasDespues;
+    byDay[dia].comp   += visitaCarasComp;
+
+    r._nAntes   = visitaNuestrasAntes;
+    r._nDespues = visitaNuestrasDespues;
+    r._comp     = visitaCarasComp;
+  });
+
+  const totalAnael = totalNuestrasDespues + totalCarasComp;
+  const sos        = totalAnael > 0 ? (totalNuestrasDespues / totalAnael) * 100 : 0;
+  const sosComp    = totalAnael > 0 ? (totalCarasComp / totalAnael) * 100 : 0;
+  const deltaNeto  = totalNuestrasDespues - totalNuestrasAntes;
+
+  document.getElementById('kSOS').textContent           = sos.toFixed(1) + '%';
+  document.getElementById('kSOSComp').textContent        = sosComp.toFixed(1) + '%';
+  document.getElementById('kNuestrasAfter').textContent  = totalNuestrasDespues;
+  document.getElementById('kNuestrasAntes').textContent  = totalNuestrasAntes;
+  document.getElementById('kCarasComp').textContent      = totalCarasComp;
+  document.getElementById('kDeltaNeto').textContent      = (deltaNeto >= 0 ? '+' : '') + deltaNeto;
+  document.getElementById('fillSOS').style.width         = Math.min(100, sos) + '%';
+  document.getElementById('fillSOSComp').style.width     = Math.min(100, sosComp) + '%';
+  document.getElementById('kDeltaNeto').style.color      = deltaNeto > 0 ? '#059669' : deltaNeto < 0 ? '#DC2626' : '#9CA3AF';
+  document.getElementById('infoVisitas').textContent     = `${records.length} visitas`;
+
+  const dark = document.documentElement.classList.contains('dark');
+  const tc   = dark ? '#94a3b8' : '#6b7280';
+  const gc   = dark ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.05)';
+
+  destroyChart('chartSOS');
+  charts['chartSOS'] = new Chart(document.getElementById('chartSOS').getContext('2d'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Nuestras caras', 'Caras competencia'],
+      datasets: [{
+        data: [+totalNuestrasDespues.toFixed(0), +totalCarasComp.toFixed(0)],
+        backgroundColor: ['rgba(79,70,229,.85)', 'rgba(239,68,68,.7)'],
+        borderWidth: 0,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '62%',
+      plugins: {
+        legend: { position:'bottom', labels:{ color:tc, font:{size:11}, padding:12, boxWidth:12 } },
+        tooltip: {
+          callbacks: {
+            label: c => {
+              const pct = totalAnael > 0 ? (c.parsed / totalAnael * 100).toFixed(1) : '0';
+              return ` ${c.label}: ${c.parsed} caras (${pct}%)`;
+            }
+          }
+        }
+      }
+    }
+  });
+
+  const prodNArr = Object.entries(byProdN).sort((a,b) => b[1].after - a[1].after).slice(0, 12);
+  destroyChart('chartNuestros');
+  charts['chartNuestros'] = new Chart(document.getElementById('chartNuestros').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: prodNArr.map(([k]) => k.length > 20 ? k.slice(0,18) + '...' : k),
+      datasets: [
+        { label: 'Antes',    data: prodNArr.map(([,v]) => v.before), backgroundColor: 'rgba(245,158,11,.7)', borderRadius: 4, borderSkipped: false },
+        { label: 'Despues',  data: prodNArr.map(([,v]) => v.after),  backgroundColor: 'rgba(79,70,229,.8)',  borderRadius: 4, borderSkipped: false },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display:true, position:'top', labels:{ color:tc, font:{size:11}, boxWidth:12 } } },
+      scales: {
+        x: { ticks:{ color:tc, font:{size:10} }, grid:{ color:gc } },
+        y: { ticks:{ color:tc, font:{size:10} }, grid:{ color:gc } },
+      }
+    }
+  });
+
+  const prodCArr = Object.entries(byProdC).sort((a,b) => b[1].faces - a[1].faces).slice(0, 12);
+  destroyChart('chartComp');
+  charts['chartComp'] = new Chart(document.getElementById('chartComp').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: prodCArr.map(([k]) => k.length > 24 ? k.slice(0,22) + '...' : k),
+      datasets: [{
+        label: 'Caras totales',
+        data: prodCArr.map(([,v]) => v.faces),
+        backgroundColor: 'rgba(239,68,68,.7)',
+        borderRadius: 4, borderSkipped: false,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+      plugins: { legend: { display:false } },
+      scales: {
+        x: { ticks:{ color:tc, font:{size:10} }, grid:{ color:gc } },
+        y: { ticks:{ color:tc, font:{size:10} }, grid:{ display:false } },
+      }
+    }
+  });
+
+  const diasArr = Object.entries(byDay);
+  const sosEvol = diasArr.map(([,v]) => {
+    const tot = v.nAfter + v.comp;
+    return tot > 0 ? +(v.nAfter / tot * 100).toFixed(1) : null;
+  });
+  destroyChart('chartEvol');
+  charts['chartEvol'] = new Chart(document.getElementById('chartEvol').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: diasArr.map(([k]) => k),
+      datasets: [{
+        label: 'SOS %',
+        data: sosEvol,
+        borderColor: '#4F46E5',
+        backgroundColor: 'rgba(79,70,229,.1)',
+        tension: .4, pointRadius: 4, fill: true, spanGaps: true,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display:false } },
+      scales: {
+        x: { ticks:{ color:tc, font:{size:10}, maxTicksLimit:10 }, grid:{ color:gc } },
+        y: { min:0, max:100, ticks:{ color:tc, font:{size:10}, callback:v=>v+'%' }, grid:{ color:gc } },
+      }
+    }
+  });
+
+  // Tabla nuestros
+  const tbN = document.getElementById('tbodyNuestros');
+  if (!prodNArr.length) {
+    tbN.innerHTML = '<tr><td colspan="5" class="text-center py-8 text-gray-400">Sin datos</td></tr>';
+  } else {
+    const totalAfterAll = prodNArr.reduce((s,[,v]) => s + v.after, 0);
+    tbN.innerHTML = prodNArr.map(([prod, v]) => {
+      const delta = v.after - v.before;
+      const pct   = totalAfterAll > 0 ? (v.after / totalAfterAll * 100) : 0;
+      const dcls  = delta > 0 ? 'delta-pos' : delta < 0 ? 'delta-neg' : 'delta-zer';
+      return `<tr class="row-hover">
+        <td class="py-2 px-4 font-semibold text-gray-800 dark:text-gray-200">${prod}</td>
+        <td class="py-2 px-4 text-center font-bold text-amber-600">${v.before}</td>
+        <td class="py-2 px-4 text-center font-bold text-green-600">${v.after}</td>
+        <td class="py-2 px-4 text-center">
+          <span class="inline-block px-2 py-0.5 rounded-full text-xs font-bold ${dcls}">
+            ${delta >= 0 ? '+' : ''}${delta}
+          </span>
+        </td>
+        <td class="py-2 px-4 text-center">
+          <div class="flex items-center gap-2">
+            <div class="flex-1 pct-bar"><div class="pct-fill bg-indigo-500" style="width:${pct.toFixed(1)}%"></div></div>
+            <span class="text-xs font-bold text-indigo-600 dark:text-indigo-300" style="min-width:38px">${pct.toFixed(1)}%</span>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Tabla competencia
+  const tbC = document.getElementById('tbodyComp');
+  if (!prodCArr.length) {
+    tbC.innerHTML = '<tr><td colspan="3" class="text-center py-8 text-gray-400">Sin datos de competencia</td></tr>';
+  } else {
+    tbC.innerHTML = prodCArr.map(([prod, v]) => {
+      const pct = totalAnael > 0 ? (v.faces / totalAnael * 100) : 0;
+      return `<tr class="row-hover">
+        <td class="py-2 px-4 font-semibold text-gray-700 dark:text-gray-300">${prod}</td>
+        <td class="py-2 px-4 text-center font-extrabold text-red-500">${v.faces}</td>
+        <td class="py-2 px-4 text-center">
+          <div class="flex items-center gap-2">
+            <div class="flex-1 pct-bar"><div class="pct-fill bg-red-400" style="width:${pct.toFixed(1)}%"></div></div>
+            <span class="text-xs font-bold text-red-500" style="min-width:38px">${pct.toFixed(1)}%</span>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Tabla por visita
+  const tbV = document.getElementById('tbodyVisitas');
+  if (!records.length) {
+    tbV.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-gray-400">Sin visitas</td></tr>';
+  } else {
+    tbV.innerHTML = records.map(r => {
+      const na    = r._nAntes   || 0;
+      const nd    = r._nDespues || 0;
+      const nc    = r._comp     || 0;
+      const tot   = nd + nc;
+      const sos   = tot > 0 ? (nd / tot * 100) : null;
+      const delta = nd - na;
+      const dcls  = delta > 0 ? 'delta-pos' : delta < 0 ? 'delta-neg' : 'delta-zer';
+      const sosCls = sos == null ? 'text-gray-400'
+                   : sos >= 50 ? 'text-green-600 font-bold'
+                   : sos >= 30 ? 'text-amber-600 font-bold'
+                   : 'text-red-500 font-bold';
+      return `<tr class="row-hover cursor-pointer transition-colors" onclick="abrirDetalle('${r.id}')">
+        <td class="py-2 px-4 text-xs font-semibold text-gray-600 dark:text-gray-300 whitespace-nowrap">${fmtDate(r.created_at)}</td>
+        <td class="py-2 px-4 text-xs text-indigo-600 dark:text-indigo-400 font-medium">${r.promoter_name || '&mdash;'}</td>
+        <td class="py-2 px-4 text-xs font-semibold text-gray-800 dark:text-white">${r.trade || '&mdash;'}</td>
+        <td class="py-2 px-4 text-center text-xs font-bold text-amber-600">${na || '&mdash;'}</td>
+        <td class="py-2 px-4 text-center text-xs font-bold text-green-600">${nd || '&mdash;'}</td>
+        <td class="py-2 px-4 text-center text-xs font-bold text-red-500">${nc || '&mdash;'}</td>
+        <td class="py-2 px-4 text-center text-xs ${sosCls}">${sos != null ? sos.toFixed(1) + '%' : '&mdash;'}</td>
+        <td class="py-2 px-4 text-center">
+          <span class="inline-block px-2 py-0.5 rounded-full text-xs font-bold ${dcls}">
+            ${delta >= 0 ? '+' : ''}${delta}
+          </span>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+}
+
+function abrirDetalle(visitaId) {
+  const r = allData.find(x => x.id === visitaId);
+  if (!r) return;
+
+  document.getElementById('modalVTitulo').textContent = r.trade || '—';
+  document.getElementById('modalVSub').textContent =
+    `${fmtDate(r.created_at)} · ${r.promoter_name || '—'} · ${r.state || '—'}`;
+
+  const myItems   = parseJ(r.myitems);
+  const compItems = parseJ(r.competitoritems);
+
+  // Modal nuestros
+  const mN = document.getElementById('modalVNuestros');
+  const nuestros = myItems.filter(i => !i.sin_stock && i.presentation);
+  if (!nuestros.length) {
+    mN.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-gray-400">Sin productos</td></tr>';
+  } else {
+    mN.innerHTML = nuestros.map(i => {
+      const before = parseFloat(i.faces_before) || 0;
+      const after  = parseFloat(i.faces_after)  || 0;
+      const delta  = after - before;
+      const dcls   = delta > 0 ? 'delta-pos' : delta < 0 ? 'delta-neg' : 'delta-zer';
+      return `<tr>
+        <td class="py-2 px-3 font-semibold text-gray-700 dark:text-gray-200">${labelConGramaje(i)}</td>
+        <td class="py-2 px-3 text-center font-bold text-amber-600">${before || '—'}</td>
+        <td class="py-2 px-3 text-center font-bold text-green-600">${after  || '—'}</td>
+        <td class="py-2 px-3 text-center">
+          <span class="inline-block px-2 py-0.5 rounded-full font-bold ${dcls}">
+            ${delta >= 0 ? '+' : ''}${delta}
+          </span>
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Modal competencia
+  const mC = document.getElementById('modalVComp');
+  const comp = compItems.filter(i => !i.sin_stock && i.presentation);
+  if (!comp.length) {
+    mC.innerHTML = '<tr><td colspan="2" class="text-center py-4 text-gray-400">Sin datos competencia</td></tr>';
+  } else {
+    mC.innerHTML = comp.map(i => {
+      const caras = getCarasComp(i);
+      return `<tr>
+        <td class="py-2 px-3 font-semibold text-gray-700 dark:text-gray-200">${labelConGramaje(i)}</td>
+        <td class="py-2 px-3 text-center font-extrabold text-red-500">${caras || '—'}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  document.getElementById('modalVisita').classList.add('open');
+}
+
+function cerrarModal() {
+  document.getElementById('modalVisita').classList.remove('open');
+}
+document.getElementById('modalVisita').addEventListener('click', e => {
+  if (e.target === e.currentTarget) cerrarModal();
+});
+
+function buscarComercio(term) {
+  clearTimeout(comercioTimer);
+  document.getElementById('fComercioVal').value = '';
+  const dd = document.getElementById('comercioDD');
+  if (!term.trim()) { dd.style.display = 'none'; return; }
+  comercioTimer = setTimeout(() => {
+    const matches = [...new Set(allData.map(r => r.trade).filter(Boolean))]
+      .filter(c => c.toLowerCase().includes(term.toLowerCase()))
+      .sort().slice(0, 15);
+    if (!matches.length) { dd.style.display = 'none'; return; }
+    dd.innerHTML = matches.map(c =>
+      `<div class="com-dd-item" onmousedown="selecComercio('${c.replace(/'/g,"\\'")}')">
+        <i class="fas fa-store mr-2 text-indigo-400 text-xs"></i>${c}
+      </div>`).join('');
+    dd.style.display = 'block';
+  }, 200);
+}
+function selecComercio(val) {
+  document.getElementById('fComercio').value    = val;
+  document.getElementById('fComercioVal').value = val;
+  document.getElementById('comercioDD').style.display = 'none';
+}
+document.addEventListener('click', e => {
+  if (!document.getElementById('comercioWrap')?.contains(e.target))
+    document.getElementById('comercioDD').style.display = 'none';
+});
+
+function destroyChart(id) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+}
+
+function limpiar() {
+  ['fDesde','fHasta','fComercio','fComercioVal'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  document.getElementById('fPromotor').value = '';
+  document.getElementById('fEstado').value   = '';
+  document.getElementById('fZona').value     = '';
+  document.getElementById('fZona').disabled  = true;
+  cargar();
+}
+
+function setDefaultDates() {
+  const hoy = new Date().toISOString().split('T')[0];
+  document.getElementById('fHasta').value = hoy;
+  document.getElementById('fDesde').value = hoy;
+}
+
+function exportXLS() {
+  try {
+    const wb = XLSX.utils.book_new();
+    const desde = document.getElementById('fDesde').value;
+    const hasta  = document.getElementById('fHasta').value;
+
+    // Reconstruir byProdN y byProdC desde allData
+    const byProdN = {}, byProdC = {};
+    let totalNuestrasAntes = 0, totalNuestrasDespues = 0, totalCarasComp = 0;
+    allData.forEach(r => {
+      parseJ(r.myitems).forEach(i => {
+        if (i.sin_stock) return;
+        const bef = parseFloat(i.faces_before) || 0;
+        const aft = parseFloat(i.faces_after) || 0;
+        totalNuestrasAntes += bef; totalNuestrasDespues += aft;
+        const k = labelConGramaje(i);
+        if (!byProdN[k]) byProdN[k] = { before: 0, after: 0 };
+        byProdN[k].before += bef; byProdN[k].after += aft;
+      });
+      parseJ(r.competitoritems).forEach(i => {
+        if (i.sin_stock) return;
+        const c = getCarasComp(i); totalCarasComp += c;
+        const k = labelConGramaje(i);
+        if (!byProdC[k]) byProdC[k] = { faces: 0 };
+        byProdC[k].faces += c;
+      });
+    });
+
+    // Hoja 1: Nuestros
+    const nuestros = Object.entries(byProdN).map(([prod, v]) => ({
+      Producto: prod,
+      'Caras Antes': v.before,
+      'Caras Después': v.after,
+      'Δ Caras': v.after - v.before,
+    })).sort((a,b) => b['Caras Después'] - a['Caras Después']);
+    if (nuestros.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(nuestros), 'Nuestros');
+
+    // Hoja 2: Competencia
+    const comp = Object.entries(byProdC).map(([prod, v]) => ({
+      Producto: prod, 'Total Caras': v.faces,
+    })).sort((a,b) => b['Total Caras'] - a['Total Caras']);
+    if (comp.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(comp), 'Competencia');
+
+    // Hoja 3: Por Visita
+    const visitas = allData.map(r => {
+      const na = r._nAntes || 0, nd = r._nDespues || 0, nc = r._comp || 0;
+      const tot = nd + nc;
+      return {
+        Fecha: fmtDate(r.created_at),
+        Promotor: r.promoter_name || '',
+        Comercio: r.trade || '',
+        Estado: r.state || '',
+        'Nuestras Antes': na,
+        'Nuestras Después': nd,
+        'Caras Comp.': nc,
+        'Total Anaquel': tot,
+        'SOS%': tot > 0 ? +(nd / tot * 100).toFixed(1) : 0,
+        'Δ Caras': nd - na,
+      };
+    });
+    if (visitas.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(visitas), 'Por Visita');
+
+    if (!wb.SheetNames.length) { alert('Sin datos para exportar.'); return; }
+    XLSX.writeFile(wb, `CAPTA_Caras_${desde}_${hasta}.xlsx`);
+  } catch(e) { console.error(e); alert('Error al exportar.'); }
+}
+
+window.onLineaChanged = (lineaId) => {
+  if (lineaId) localStorage.setItem('sp-linea', lineaId);
+  document.getElementById('fPromotor').value = '';
+  document.getElementById('fPromotor').innerHTML = '<option value="">Todos</option>';
+  document.getElementById('fEstado').value = '';
+  document.getElementById('fZona').value = '';
+  document.getElementById('fZona').disabled = true;
+  document.getElementById('fComercio').value = '';
+  document.getElementById('fComercioVal').value = '';
+  loadCatalogs().then(() => cargar());
+};
+
+const waitDb = window.captaWaitDb;
+
+waitDb(async () => {
+  setDefaultDates();
+  await loadCatalogs();
+  await cargar();
+});
+</script>
+</body>
+</html>

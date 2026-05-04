@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Análisis de Precios — CAPTA</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+<style>
+  .table-header-sticky th { position:sticky; top:0; z-index:10; background:#F9FAFB; }
+  .dark .table-header-sticky th { background:#334155; color:#e2e8f0; }
+  .com-dd { position:absolute; top:100%; left:0; z-index:200; width:100%; background:white;
+    border:1px solid #e5e7eb; border-radius:8px; max-height:200px; overflow-y:auto;
+    box-shadow:0 8px 24px rgba(0,0,0,.12); }
+  .dark .com-dd { background:#1e293b; border-color:#475569; }
+  .com-dd-item { padding:8px 12px; cursor:pointer; font-size:.83rem; border-bottom:1px solid #f3f4f6; }
+  .dark .com-dd-item:hover { background:#334155; }
+  .row-hover:hover { background:rgba(79,70,229,.04) !important; }
+  .dark .row-hover:hover { background:rgba(139,92,246,.1) !important; }
+  .tab-btn { border-bottom:3px solid transparent; transition:all .15s; }
+  .tab-btn.active { border-bottom-color:#4F46E5; color:#4F46E5; }
+  .dark .tab-btn.active { border-bottom-color:#818CF8; color:#818CF8; }
+  .pct-bar { height:6px; border-radius:99px; background:#e5e7eb; overflow:hidden; }
+  .dark .pct-bar { background:#334155; }
+  .pct-fill { height:100%; border-radius:99px; }
+  select:focus, input:focus { outline:none; box-shadow:0 0 0 3px rgba(79,70,229,.18); border-color:#4F46E5 !important; }
+</style>
+<script>tailwind.config={darkMode:'class'}</script>
+</head>
+<body class="bg-gray-50 dark:bg-slate-900 text-gray-900 dark:text-gray-100 font-sans">
+
+{% include 'navbar.html' %}
+
+<div class="container mx-auto p-4 sm:p-6 lg:p-8">
+
+  <!-- Título -->
+  <div class="mb-6">
+    <h1 class="text-3xl font-extrabold text-gray-800 dark:text-white">
+      <i class="fas fa-chart-bar mr-2 text-indigo-500"></i>Análisis de Precios
+    </h1>
+    <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+      Precios en USD — nuestros productos vs. competencia directa vinculada.
+    </p>
+  </div>
+
+  <!-- Filtros -->
+  <div class="bg-white dark:bg-slate-800 shadow-sm rounded-2xl p-5 mb-6 border border-gray-100 dark:border-slate-700">
+    <h2 class="text-base font-bold text-gray-700 dark:text-white mb-4">Filtros</h2>
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-4">
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Desde</label>
+        <input type="date" id="fDesde" class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm" onchange="aplicarFiltros()">
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Hasta</label>
+        <input type="date" id="fHasta" class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm" onchange="aplicarFiltros()">
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Estado</label>
+        <select id="fEstado" class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm" onchange="onEstadoChange()">
+          <option value="">Todos</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Zona</label>
+        <select id="fZona" class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm" onchange="aplicarFiltros()">
+          <option value="">Todas</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Promotor</label>
+        <select id="fPromotor" class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm" onchange="aplicarFiltros()">
+          <option value="">Todos</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Nuestro producto</label>
+        <select id="fNuestroProducto" class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm" onchange="aplicarFiltros()">
+          <option value="">Todos</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Tipo de comercio</label>
+        <select id="fTipoComercio" class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm" onchange="aplicarFiltros()">
+          <option>Todos</option><option>Detal</option><option>Mayorista</option>
+        </select>
+      </div>
+      <div class="relative" id="comercioWrapA">
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Comercio</label>
+        <input type="text" id="fComercioSearch" placeholder="Buscar comercio…"
+          class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm"
+          oninput="buscarComercio(this.value)" onchange="aplicarFiltros()" autocomplete="off">
+        <div id="comercioDropdown" class="com-dd" style="display:none"></div>
+        <input type="hidden" id="fComercioSelected">
+      </div>
+    </div>
+    <div class="flex gap-3 border-t border-gray-100 dark:border-slate-700 pt-4 flex-wrap">
+      <button id="btnFiltrar" onclick="fetchDataAnalisis()"
+        class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-5 rounded-lg shadow transition-all flex items-center gap-2">
+        <i class="fas fa-filter"></i> Aplicar filtros
+      </button>
+      <button onclick="limpiarFiltros()"
+        class="bg-gray-100 hover:bg-gray-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-gray-600 dark:text-gray-300 font-semibold py-2 px-4 rounded-lg transition-all flex items-center gap-2">
+        <i class="fas fa-undo"></i> Limpiar
+      </button>
+      <button onclick="exportXLS()"
+        class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 px-4 rounded-lg transition-all flex items-center gap-2 ml-auto">
+        <i class="fas fa-file-excel"></i> Exportar Excel
+      </button>
+    </div>
+  </div>
+
+  <!-- Aviso sin competencia -->
+  <div id="avisoSinComp" style="display:none" class="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-2xl p-5 mb-6">
+    <div class="flex items-start gap-3">
+      <i class="fas fa-triangle-exclamation text-amber-500 text-lg mt-0.5 flex-shrink-0"></i>
+      <div>
+        <p class="font-bold text-amber-800 dark:text-amber-300 mb-1">Productos sin competencia directa asignada</p>
+        <div id="listaSinComp" class="text-sm text-amber-700 dark:text-amber-400 flex flex-wrap gap-2"></div>
+        <p class="text-xs text-amber-600 dark:text-amber-500 mt-2">
+          Ve a <a href="/productos" class="underline font-semibold">Productos</a> y vincula competidores directos.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-4 border border-gray-100 dark:border-slate-700 shadow-sm text-center">
+      <p class="text-2xl font-extrabold text-indigo-600" id="kpiTotalComp">—</p>
+      <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Comparaciones</p>
+      <div class="pct-bar mt-2"><div class="pct-fill bg-indigo-500" style="width:80%"></div></div>
+    </div>
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-4 border border-gray-100 dark:border-slate-700 shadow-sm text-center">
+      <p class="text-2xl font-extrabold text-green-600" id="kpiMasBaratos">—</p>
+      <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Somos más baratos</p>
+      <div class="pct-bar mt-2"><div class="pct-fill bg-green-500" id="barMasBaratos" style="width:0%"></div></div>
+    </div>
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-4 border border-gray-100 dark:border-slate-700 shadow-sm text-center">
+      <p class="text-2xl font-extrabold text-red-600" id="kpiMasCaros">—</p>
+      <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Somos más caros</p>
+      <div class="pct-bar mt-2"><div class="pct-fill bg-red-500" id="barMasCaros" style="width:0%"></div></div>
+    </div>
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-4 border border-gray-100 dark:border-slate-700 shadow-sm text-center">
+      <p class="text-2xl font-extrabold" id="kpiDifPromedio">—</p>
+      <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Diferencia promedio</p>
+      <div class="pct-bar mt-2"><div class="pct-fill bg-amber-400" style="width:60%"></div></div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="bg-white dark:bg-slate-800 rounded-2xl border border-gray-100 dark:border-slate-700 shadow-sm overflow-hidden mb-6">
+    <div class="flex overflow-x-auto border-b border-gray-100 dark:border-slate-700 px-2 pt-2 gap-1">
+      <button class="tab-btn active px-5 py-3 text-sm font-semibold whitespace-nowrap rounded-t-xl" onclick="switchTab('comparativa', this)">
+        <i class="fas fa-chart-bar mr-1.5 text-indigo-400"></i>Comparativa
+      </button>
+      <button class="tab-btn px-5 py-3 text-sm font-semibold whitespace-nowrap rounded-t-xl text-gray-500 dark:text-gray-400" onclick="switchTab('evolucion', this)">
+        <i class="fas fa-chart-line mr-1.5 text-indigo-400"></i>Evolución en el tiempo
+      </button>
+      <button class="tab-btn px-5 py-3 text-sm font-semibold whitespace-nowrap rounded-t-xl text-gray-500 dark:text-gray-400" onclick="switchTab('zonas', this)">
+        <i class="fas fa-map-marker-alt mr-1.5 text-indigo-400"></i>Por zona / estado
+      </button>
+      <button class="tab-btn px-5 py-3 text-sm font-semibold whitespace-nowrap rounded-t-xl text-gray-500 dark:text-gray-400" onclick="switchTab('promotores', this)">
+        <i class="fas fa-user-tie mr-1.5 text-indigo-400"></i>Por promotor
+      </button>
+      <button class="tab-btn px-5 py-3 text-sm font-semibold whitespace-nowrap rounded-t-xl text-gray-500 dark:text-gray-400" onclick="switchTab('comercios', this)">
+        <i class="fas fa-store mr-1.5 text-indigo-400"></i>Por comercio
+      </button>
+      <button class="tab-btn px-5 py-3 text-sm font-semibold whitespace-nowrap rounded-t-xl text-gray-500 dark:text-gray-400" onclick="switchTab('detalle', this)">
+        <i class="fas fa-list mr-1.5 text-indigo-400"></i>Detalle
+      </button>
+    </div>
+
+    <!-- Tab: Comparativa -->
+    <div id="tab-comparativa" class="p-6">
+      <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+        <div>
+          <h3 class="text-sm font-bold text-gray-700 dark:text-white">Precio promedio USD — nuestro vs. competidor directo</h3>
+          <p class="text-xs text-gray-400 mt-0.5">Solo productos con competencia directa vinculada</p>
+        </div>
+        <select id="chartType" onchange="drawChartComparativa()" class="h-9 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm">
+          <option value="bar">Barras</option>
+          <option value="line">Línea</option>
+        </select>
+      </div>
+      <div style="position:relative;height:320px"><canvas id="chartComparativa"></canvas></div>
+    </div>
+
+    <!-- Tab: Evolución -->
+    <div id="tab-evolucion" class="p-6 hidden">
+      <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+        <div>
+          <h3 class="text-sm font-bold text-gray-700 dark:text-white">Evolución del precio en el tiempo</h3>
+          <p class="text-xs text-gray-400 mt-0.5">Selecciona un producto para ver su curva de precios</p>
+        </div>
+        <select id="selectorProductoEvol" class="h-9 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm min-w-48" onchange="drawChartEvolucion()">
+          <option value="">— Selecciona producto —</option>
+        </select>
+      </div>
+      <div style="position:relative;height:320px"><canvas id="chartEvolucion"></canvas></div>
+    </div>
+
+    <!-- Tab: Por zona/estado -->
+    <div id="tab-zonas" class="p-6 hidden">
+      <div class="mb-4">
+        <h3 class="text-sm font-bold text-gray-700 dark:text-white mb-1">Precio promedio por zona / estado</h3>
+        <p class="text-xs text-gray-400">Compara el precio promedio de nuestros productos según la ubicación</p>
+      </div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div>
+          <p class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Por estado</p>
+          <div style="position:relative;height:280px"><canvas id="chartZonaEstado"></canvas></div>
+        </div>
+        <div>
+          <p class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">Por zona</p>
+          <div style="position:relative;height:280px"><canvas id="chartZonaZona"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: Por promotor -->
+    <div id="tab-promotores" class="p-6 hidden">
+      <div class="mb-4">
+        <h3 class="text-sm font-bold text-gray-700 dark:text-white mb-1">Precios registrados por promotor</h3>
+        <p class="text-xs text-gray-400">Detecta registros inconsistentes — promotores que reportan precios muy altos o bajos vs. el promedio</p>
+      </div>
+      <div style="position:relative;height:280px;margin-bottom:24px"><canvas id="chartPromotores"></canvas></div>
+      <div class="overflow-x-auto rounded-xl border border-gray-100 dark:border-slate-700">
+        <table class="min-w-full divide-y divide-gray-100 dark:divide-slate-700 text-sm">
+          <thead class="table-header-sticky">
+            <tr>
+              <th class="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Promotor</th>
+              <th class="py-3 px-4 text-center text-xs font-bold text-indigo-500 uppercase tracking-wider">Precio prom. nuestro</th>
+              <th class="py-3 px-4 text-center text-xs font-bold text-red-500 uppercase tracking-wider">Precio prom. comp.</th>
+              <th class="py-3 px-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Registros</th>
+              <th class="py-3 px-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">vs. Promedio general</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyPromotores" class="bg-white dark:bg-slate-800 divide-y divide-gray-50 dark:divide-slate-700"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Tab: Por comercio -->
+    <div id="tab-comercios" class="p-6 hidden">
+      <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <div>
+          <h3 class="text-sm font-bold text-gray-700 dark:text-white mb-1">Precio promedio por comercio</h3>
+          <p class="text-xs text-gray-400">Nuestro precio vs. competencia en cada punto de venta</p>
+        </div>
+        <input type="text" id="buscarComercioTabla" placeholder="Buscar comercio…" 
+          class="h-9 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm w-52" oninput="filtrarTablaComercio(this.value)">
+      </div>
+      <div class="overflow-x-auto rounded-xl border border-gray-100 dark:border-slate-700 max-h-96">
+        <table class="min-w-full divide-y divide-gray-100 dark:divide-slate-700 text-sm">
+          <thead class="table-header-sticky">
+            <tr>
+              <th class="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Comercio</th>
+              <th class="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Estado / Zona</th>
+              <th class="py-3 px-4 text-center text-xs font-bold text-indigo-500 uppercase tracking-wider">Precio nuestro</th>
+              <th class="py-3 px-4 text-center text-xs font-bold text-red-500 uppercase tracking-wider">Precio comp.</th>
+              <th class="py-3 px-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Diferencia</th>
+              <th class="py-3 px-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Visitas</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyComercio" class="bg-white dark:bg-slate-800 divide-y divide-gray-50 dark:divide-slate-700"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Tab: Detalle -->
+    <div id="tab-detalle" class="hidden">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-slate-700">
+        <div>
+          <h3 class="text-sm font-bold text-gray-700 dark:text-white">Comparaciones individuales</h3>
+          <p class="text-xs text-gray-400 mt-0.5">Cada fila = una captura de precio con su comparación directa</p>
+        </div>
+        <span id="analisisInfo" class="text-xs font-semibold text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 dark:text-indigo-300 px-3 py-1 rounded-full">—</span>
+      </div>
+      <div class="overflow-x-auto" style="max-height:65vh;overflow-y:auto">
+        <table class="min-w-full divide-y divide-gray-100 dark:divide-slate-700">
+          <thead class="table-header-sticky">
+            <tr>
+              <th class="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider" style="min-width:110px">Fecha</th>
+              <th class="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Comercio</th>
+              <th class="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Estado/Zona</th>
+              <th class="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Tipo</th>
+              <th class="py-3 px-4 text-left text-xs font-bold text-indigo-500 uppercase tracking-wider">Nuestro producto</th>
+              <th class="py-3 px-4 text-center text-xs font-bold text-indigo-500 uppercase tracking-wider">USD nuestro</th>
+              <th class="py-3 px-4 text-left text-xs font-bold text-red-500 uppercase tracking-wider">Competidor</th>
+              <th class="py-3 px-4 text-center text-xs font-bold text-red-500 uppercase tracking-wider">USD comp.</th>
+              <th class="py-3 px-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Δ%</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyAnalisis" class="bg-white dark:bg-slate-800 divide-y divide-gray-50 dark:divide-slate-700">
+            <tr><td colspan="9" class="text-center py-10 text-gray-400">Aplica los filtros para ver datos</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const waitDb         = window.captaWaitDb;
+const captaParseJ    = window.captaParseJ;
+const supabaseClient = { from: (...a) => window.db.from(...a) };
+const empresaId = localStorage.getItem('empresa_id') || await (async()=>{
+  try { const r=await fetch('/api/dashboard/config'); if(r.ok){const d=await r.json();localStorage.setItem('empresa_id',d.empresa_id);localStorage.setItem('empresa_nombre',d.empresa_nombre);return d.empresa_id;} return null; } catch { return null; }
+})();
+if (!empresaId) { window.location.replace('/'); throw new Error('no session'); }
+
+const $ = id => document.getElementById(id);
+
+// ── Estado global ─────────────────────────────────────────────────
+let tasasCache    = [];
+let analisisData  = [];
+let nuestrosPrecios = [];
+let estadosData   = [], zonasData = [];
+let mapCompDirecta = {};
+let sinCompAsignada = new Set();
+let chartInst     = {};
+let comercioTimer = null;
+let tablaComercioData = [];
+
+// ── Helpers gráficos ──────────────────────────────────────────────
+function chartColors() {
+  const dark = document.documentElement.classList.contains('dark');
+  return {
+    tc: dark ? '#94a3b8' : '#4b5563',
+    gc: dark ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.05)',
+  };
+}
+function destroyChart(id) {
+  if (chartInst[id]) { chartInst[id].destroy(); delete chartInst[id]; }
+}
+function avg(arr) { return arr.length ? arr.reduce((a,b) => a+b, 0) / arr.length : 0; }
+
+// ── Tabs ──────────────────────────────────────────────────────────
+const TABS = ['comparativa','evolucion','zonas','promotores','comercios','detalle'];
+function switchTab(name, btn) {
+  TABS.forEach(t => $('tab-'+t).classList.add('hidden'));
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    b.classList.remove('active');
+    b.classList.add('text-gray-500','dark:text-gray-400');
+  });
+  $('tab-'+name).classList.remove('hidden');
+  btn.classList.add('active');
+  btn.classList.remove('text-gray-500','dark:text-gray-400');
+  renderTab(name);
+}
+function renderTab(name) {
+  if (name === 'comparativa') drawChartComparativa();
+  if (name === 'evolucion') drawChartEvolucion();
+  if (name === 'zonas') drawChartZonas();
+  if (name === 'promotores') drawChartPromotores();
+  if (name === 'comercios') renderTablaComercio();
+  if (name === 'detalle') renderTablaDetalle();
+}
+
+// ── Tasas y helpers ───────────────────────────────────────────────
+async function cargarTasas() {
+  const { data } = await supabaseClient.from('web_tasa').select('fecha,tasa_bs_usd,tasa_cop_usd').order('fecha', { ascending: false });
+  tasasCache = data || [];
+}
+function obtenerTasa(fechaStr) {
+  if (!tasasCache.length) return { tasa_bs_usd:36.5, tasa_cop_usd:4200 };
+  const sorted = [...tasasCache].sort((a,b) => new Date(b.fecha) - new Date(a.fecha));
+  return sorted.find(t => new Date(t.fecha) <= new Date(fechaStr)) || sorted[0];
+}
+function normalizarMoneda(m) {
+  if (!m) return 'USD';
+  const raw = String(m).trim().toUpperCase();
+  const map = { BS:'Bs','B$':'Bs','BS.':'Bs',VES:'Bs',VEF:'Bs',COP:'COP',COL:'COP',USD:'USD','US$':'USD' };
+  return map[raw] || (/^COP$/i.test(raw)?'COP':/^BS/i.test(raw)?'Bs':/^USD$/i.test(raw)?'USD':raw);
+}
+function parsePrecio(precio) {
+  if (!precio && precio !== 0) return NaN;
+  let s = String(precio).replace(/[^0-9.,]/g,'').trim();
+  if (!s) return NaN;
+  if (s.includes(',') && s.includes('.')) {
+    const lc=s.lastIndexOf(','), ld=s.lastIndexOf('.');
+    s = lc > ld ? s.replace(/\./g,'').replace(',','.') : s.replace(/,/g,'');
+  } else if (s.includes(',')) {
+    const partes = s.split(',');
+    s = partes[1] && partes[1].length <= 2 ? s.replace(',','.') : s.replace(/,/g,'');
+  }
+  return parseFloat(s);
+}
+function convertirAPrecioUSD(precio, moneda, fecha) {
+  if (!precio && precio !== 0) return null;
+  const n = parsePrecio(precio);
+  if (isNaN(n) || n <= 0) return null;
+  const mn = normalizarMoneda(moneda);
+  const t = obtenerTasa(fecha);
+  if (mn === 'USD') return n;
+  if (mn === 'Bs') return n / parseFloat(t.tasa_bs_usd || 36.5);
+  if (mn === 'COP') return n / parseFloat(t.tasa_cop_usd || 4200);
+  return n;
+}
+
+// ── Competencia directa ───────────────────────────────────────────
+function buildKey(presentation, gramaje, unidad) {
+  if (!gramaje) return presentation;
+  const g = gramaje % 1 === 0 ? parseInt(gramaje) : gramaje;
+  return `${presentation} ${g}${unidad || ''}`;
+}
+async function cargarMapaCompDirecta() {
+  const { data } = await supabaseClient.from('web_producto_competencia')
+    .select(`producto_id, competidor_id, web_myproductos!fk_prod_comp_producto(presentation,gramaje,unidad), web_competidor!fk_prod_comp_competidor(presentation,gramaje,unidad)`)
+    .eq('empresa_id', empresaId);
+  mapCompDirecta = {};
+  (data || []).forEach(rel => {
+    const pN = rel.web_myproductos;
+    const pC = rel.web_competidor;
+    if (!pN || !pC) return;
+    const keyN = buildKey(pN.presentation, pN.gramaje, pN.unidad);
+    const keyC = buildKey(pC.presentation, pC.gramaje, pC.unidad);
+    if (!mapCompDirecta[keyN]) mapCompDirecta[keyN] = new Set();
+    mapCompDirecta[keyN].add(keyC);
+  });
+}
+
+// ── Catálogos ─────────────────────────────────────────────────────
+async function loadCatalogs() {
+  const { data: estados } = await supabaseClient.from('web_estados').select('id,nombre').order('nombre');
+  estadosData = estados || [];
+  $('fEstado').innerHTML = '<option value="">Todos</option>' + estadosData.map(e => `<option value="${e.nombre}">${e.nombre}</option>`).join('');
+
+  const { data: zonas } = await supabaseClient.from('web_zonas').select('id,nombre,estado_id').order('nombre');
+  zonasData = zonas || [];
+
+  const { data: promos } = await supabaseClient.from('web_promotores').select('promoter_name').eq('empresa_id', empresaId).order('promoter_name');
+  $('fPromotor').innerHTML = '<option value="">Todos</option>' + (promos || []).map(p => `<option value="${p.promoter_name}">${p.promoter_name}</option>`).join('');
+
+  await cargarMapaCompDirecta();
+  poblarSelectProductos();
+  await fetchDataAnalisis();
+}
+
+function onEstadoChange() {
+  const eid = estadosData.find(e => e.nombre === $('fEstado').value)?.id;
+  $('fZona').innerHTML = '<option value="">Todas</option>';
+  if (eid) zonasData.filter(z => z.estado_id === eid).forEach(z => $('fZona').innerHTML += `<option value="${z.nombre}">${z.nombre}</option>`);
+  aplicarFiltros();
+}
+
+function poblarSelectProductos() {
+  const opts = Object.keys(mapCompDirecta).sort();
+  $('fNuestroProducto').innerHTML = '<option value="">Todos</option>' + opts.map(p => `<option value="${p}">${p}</option>`).join('');
+  $('selectorProductoEvol').innerHTML = '<option value="">— Selecciona producto —</option>' + opts.map(p => `<option value="${p}">${p}</option>`).join('');
+}
+
+// ── FETCH PRINCIPAL ───────────────────────────────────────────────
+async function fetchDataAnalisis() {
+  const btn = $('btnFiltrar');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Cargando…';
+
+  try {
+    await cargarTasas();
+
+    const desde = $('fDesde').value;
+    const hasta = $('fHasta').value;
+    const est = $('fEstado').value;
+    const zona = $('fZona').value;
+    const prom = $('fPromotor').value;
+    const filtroProd = $('fNuestroProducto').value;
+    const tipoComercio = $('fTipoComercio').value;
+    const comercio = $('fComercioSelected').value;
+    const lineaId = localStorage.getItem('sp-linea') || '';
+
+    let q = supabaseClient.from('web_precios').select('*').eq('empresa_id', empresaId);
+    if (desde) q = q.gte('created_at', desde + 'T00:00:00+00:00');
+    if (hasta) q = q.lte('created_at', hasta + 'T23:59:59+00:00');
+    if (est) q = q.eq('state', est);
+    if (zona) q = q.eq('zone', zona);
+    if (prom) q = q.eq('promoter_name', prom);
+    if (comercio) q = q.eq('trade', comercio);
+    if (lineaId) q = q.eq('linea_id', lineaId);
+    if (tipoComercio !== 'Todos') q = q.eq('p_mayorista', tipoComercio === 'Detal' ? 'No' : 'Si');
+
+    const { data: rawData, error } = await q.order('created_at', { ascending: false });
+    if (error) throw error;
+
+    const data = await window.captaEnrichItems(rawData || [], empresaId, supabaseClient);
+
+    const filasComparacion = [];
+    const filasNuestros = [];
+    sinCompAsignada = new Set();
+
+    (data || []).forEach(row => {
+      const mi = parseJSON(row.myitems);
+      const ci = parseJSON(row.competitoritems);
+      const ciIdx = {};
+      ci.forEach(c => { if (c.presentation) ciIdx[buildKey(c.presentation, c.gramaje, c.unidad)] = c; });
+
+      mi.forEach(m => {
+        if (!m.presentation) return;
+        const keyN = buildKey(m.presentation, m.gramaje, m.unidad);
+        if (filtroProd && keyN !== filtroProd) return;
+
+        const nUSD = convertirAPrecioUSD(m.price, m.currency, row.created_at);
+        if (!nUSD) { sinCompAsignada.add(keyN); return; }
+
+        const base = {
+          fecha: row.created_at,
+          promotor: row.promoter_name || '—',
+          state: row.state || '—',
+          zone: row.zone || '—',
+          trade: row.trade || '—',
+          p_mayorista: row.p_mayorista,
+          nuestroProd: keyN,
+          nUSD,
+          nPrecioOrig: m.price,
+          nMoneda: m.currency,
+          compProd: null,
+          cUSD: null,
+          diferencia: null
+        };
+
+        filasNuestros.push(base);
+
+        const competidoresVinculados = mapCompDirecta[keyN];
+        if (competidoresVinculados && competidoresVinculados.size > 0) {
+          competidoresVinculados.forEach(keyC => {
+            const cItem = ciIdx[keyC];
+            if (!cItem || cItem.sin_stock) return;
+            const cUSD = convertirAPrecioUSD(cItem.price, cItem.currency, row.created_at);
+            if (!cUSD) return;
+            const diferencia = ((nUSD - cUSD) / cUSD) * 100;
+            filasComparacion.push({ ...base, compProd: keyC, cUSD, cPrecioOrig: cItem.price, cMoneda: cItem.currency, diferencia });
+          });
+        } else {
+          sinCompAsignada.add(keyN);
+        }
+      });
+    });
+
+    analisisData = filasComparacion.length > 0 ? filasComparacion : filasNuestros;
+    nuestrosPrecios = filasNuestros;
+
+    mostrarAvisoSinComp();
+    actualizarKPIs(filasComparacion);
+    TABS.forEach(t => renderTab(t));
+
+  } catch(e) {
+    console.error(e);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-filter"></i> Aplicar filtros';
+  }
+}
+
+function parseJSON(v) {
+  if (Array.isArray(v)) return v;
+  if (typeof v === 'string') { try { return JSON.parse(v); } catch { return []; } }
+  return [];
+}
+
+function mostrarAvisoSinComp() {
+  const aviso = $('avisoSinComp');
+  if (!sinCompAsignada.size) { aviso.style.display = 'none'; return; }
+  aviso.style.display = 'block';
+  $('listaSinComp').innerHTML = [...sinCompAsignada].sort().map(p => 
+    `<span class="inline-flex items-center gap-1 bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 px-2 py-1 rounded-lg text-xs font-semibold">
+      <i class="fas fa-link-slash text-xs"></i>${p}
+    </span>`).join('');
+}
+
+function actualizarKPIs(filas) {
+  const total = filas.length;
+  const masBarato = filas.filter(f => f.diferencia < 0).length;
+  const masCaro = filas.filter(f => f.diferencia > 0).length;
+  const difProm = total > 0 ? filas.reduce((s,f) => s + f.diferencia, 0) / total : 0;
+  const pctBarat = total > 0 ? Math.round((masBarato / total) * 100) : 0;
+  const pctCaro = total > 0 ? Math.round((masCaro / total) * 100) : 0;
+
+  $('kpiTotalComp').textContent = total;
+  $('kpiMasBaratos').textContent = `${masBarato} (${pctBarat}%)`;
+  $('kpiMasCaros').textContent = `${masCaro} (${pctCaro}%)`;
+  $('kpiDifPromedio').textContent = (difProm > 0 ? '+' : '') + difProm.toFixed(1) + '%';
+  $('kpiDifPromedio').style.color = difProm > 0 ? '#DC2626' : difProm < 0 ? '#16A34A' : '#9CA3AF';
+  $('barMasBaratos').style.width = `${pctBarat}%`;
+  $('barMasCaros').style.width = `${pctCaro}%`;
+  $('analisisInfo').textContent = `${total} comparaciones`;
+}
+
+// ── Gráficos y Tablas ─────────────────────────────────────────────
+function drawChartComparativa() {
+  const type = $('chartType').value;
+  const { tc, gc } = chartColors();
+  const pares = {};
+  analisisData.forEach(f => {
+    const k = `${f.nuestroProd} vs ${f.compProd || 'Sin comp'}`;
+    if (!pares[k]) pares[k] = { n:[], c:[] };
+    pares[k].n.push(f.nUSD);
+    if (f.cUSD) pares[k].c.push(f.cUSD);
+  });
+  const labels = Object.keys(pares);
+  destroyChart('chartComparativa');
+  if (!labels.length) return;
+  chartInst['chartComparativa'] = new Chart($('chartComparativa').getContext('2d'), {
+    type,
+    data: {
+      labels,
+      datasets: [
+        { label:'Nuestro (USD)', data:labels.map(k=>+avg(pares[k].n).toFixed(2)), backgroundColor:'rgba(79,70,229,.8)', borderColor:'#4f46e5', borderWidth:2 },
+        { label:'Competidor (USD)', data:labels.map(k=>+avg(pares[k].c || []).toFixed(2)), backgroundColor:'rgba(239,68,68,.7)', borderColor:'#ef4444', borderWidth:2 }
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins: { legend: { labels:{ color:tc, font:{size:11} }}},
+      scales: {
+        x: { ticks:{ color:tc, font:{size:10} }, grid:{color:gc} },
+        y: { ticks:{ color:tc, font:{size:10}, callback:v=>'$'+v.toFixed(2)}, grid:{color:gc} }
+      }
+    }
+  });
+}
+
+function drawChartEvolucion() { console.log("Evolución - pendiente implementar"); }
+function drawChartZonas() { console.log("Zonas - pendiente implementar"); }
+function drawChartPromotores() { console.log("Promotores - pendiente implementar"); }
+function renderTablaComercio() { console.log("Tabla comercio - pendiente implementar"); }
+
+function renderTablaDetalle() {
+  const filas = analisisData.length > 0 ? analisisData : nuestrosPrecios;
+  const tbody = $('tbodyAnalisis');
+  $('analisisInfo').textContent = `${filas.length} registros`;
+
+  if (!filas.length) {
+    tbody.innerHTML = `<tr><td colspan="9" class="text-center py-10 text-gray-400">Sin datos con los filtros actuales</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filas.map(f => `
+    <tr class="row-hover">
+      <td class="py-3 px-4">${new Date(f.fecha).toLocaleDateString('es-ES')}</td>
+      <td class="py-3 px-4">${f.trade}</td>
+      <td class="py-3 px-4">${f.state}${f.zone && f.zone !== '—' ? ' / '+f.zone : ''}</td>
+      <td class="py-3 px-4">${f.p_mayorista === 'Si' ? 'Mayorista' : 'Detal'}</td>
+      <td class="py-3 px-4">${f.nuestroProd}</td>
+      <td class="py-3 px-4 text-center font-bold text-indigo-600">$${f.nUSD.toFixed(2)}</td>
+      <td class="py-3 px-4">${f.compProd || '<span class="text-amber-600">Sin competidor</span>'}</td>
+      <td class="py-3 px-4 text-center ${f.cUSD ? 'text-red-500' : 'text-gray-400'}">${f.cUSD ? '$'+f.cUSD.toFixed(2) : '—'}</td>
+      <td class="py-3 px-4 text-center">${f.diferencia !== null ? f.diferencia.toFixed(1)+'%' : '—'}</td>
+    </tr>
+  `).join('');
+}
+
+function buscarComercio(term) {
+  clearTimeout(comercioTimer);
+  const dd = $('comercioDropdown');
+  if (!term.trim()) { dd.style.display='none'; return; }
+  comercioTimer = setTimeout(async () => {
+    const { data } = await supabaseClient.from('web_precios').select('trade').eq('empresa_id', empresaId).ilike('trade', `%${term}%`).limit(20);
+    const trades = [...new Set((data||[]).map(r=>r.trade).filter(Boolean))].sort();
+    if (!trades.length) { dd.style.display='none'; return; }
+    dd.innerHTML = trades.map(t => `<div class="com-dd-item" onmousedown="selecComercio('${t.replace(/'/g,"\\'")}')"><i class="fas fa-store mr-2 text-indigo-400 text-xs"></i>${t}</div>`).join('');
+    dd.style.display = 'block';
+  }, 300);
+}
+function selecComercio(trade) {
+  $('fComercioSelected').value = trade;
+  $('fComercioSearch').value = trade;
+  $('comercioDropdown').style.display = 'none';
+}
+
+function limpiarFiltros() {
+  ['fDesde','fHasta','fComercioSearch'].forEach(id => { const el=$(id); if(el) el.value=''; });
+  ['fEstado','fZona','fPromotor','fNuestroProducto','fTipoComercio'].forEach(id => {
+    const el=$(id); if(el) el.value = el.options[0]?.value || '';
+  });
+  $('fComercioSelected').value = '';
+  $('avisoSinComp').style.display = 'none';
+}
+
+function setDefaultDates() {
+  const hoy = new Date().toISOString().split('T')[0];
+  $('fDesde').value = hoy;
+  $('fHasta').value = hoy;
+}
+
+function aplicarFiltros() {
+  fetchDataAnalisis();
+}
+
+waitDb(() => { setDefaultDates(); loadCatalogs(); });
+
+function exportXLS() {
+  try {
+    const wb = XLSX.utils.book_new();
+    const desde = $('fDesde').value;
+    const hasta = $('fHasta').value;
+
+    // Hoja 1: Comparaciones
+    const filas = analisisData.length > 0 ? analisisData : nuestrosPrecios;
+    const comp = filas.map(f => ({
+      'Fecha': new Date(f.fecha).toLocaleDateString('es-ES'),
+      'Promotor': f.promotor,
+      'Comercio': f.trade,
+      'Estado': f.state,
+      'Zona': f.zone,
+      'Nuestro Producto': f.nuestroProd,
+      'USD Nuestro': +f.nUSD.toFixed(2),
+      'Competidor': f.compProd || '',
+      'USD Comp.': f.cUSD ? +f.cUSD.toFixed(2) : '',
+      'Δ%': f.diferencia !== null ? +f.diferencia.toFixed(1) : '',
+    }));
+    if (comp.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(comp), 'Comparaciones');
+
+    // Hoja 2: Por Promotor
+    const byProm = {};
+    filas.forEach(f => {
+      const p = f.promotor;
+      if (!byProm[p]) byProm[p] = { Promotor: p, Registros: 0, _sN: 0, _sC: 0, _sd: 0, _nd: 0 };
+      byProm[p].Registros++;
+      byProm[p]._sN += f.nUSD;
+      if (f.cUSD) { byProm[p]._sC += f.cUSD; byProm[p]._nd++; }
+      if (f.diferencia !== null) { byProm[p]._sd += f.diferencia; }
+    });
+    const porProm = Object.values(byProm).map(x => ({
+      Promotor: x.Promotor,
+      Registros: x.Registros,
+      'Precio Prom. Nuestro (USD)': +(x._sN / x.Registros).toFixed(2),
+      'Precio Prom. Comp. (USD)': x._nd ? +(x._sC / x._nd).toFixed(2) : '',
+      'Δ% Promedio': x.Registros ? +(x._sd / x.Registros).toFixed(1) : '',
+    }));
+    if (porProm.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(porProm), 'Por Promotor');
+
+    // Hoja 3: Por Comercio
+    const byTrade = {};
+    filas.forEach(f => {
+      const t = f.trade;
+      if (!byTrade[t]) byTrade[t] = { Comercio: t, Estado: f.state, Zona: f.zone, Registros: 0, _sN: 0, _sC: 0, _sd: 0, _nd: 0 };
+      byTrade[t].Registros++;
+      byTrade[t]._sN += f.nUSD;
+      if (f.cUSD) { byTrade[t]._sC += f.cUSD; byTrade[t]._nd++; }
+      if (f.diferencia !== null) byTrade[t]._sd += f.diferencia;
+    });
+    const porTrade = Object.values(byTrade).map(x => ({
+      Comercio: x.Comercio, Estado: x.Estado, Zona: x.Zona, Registros: x.Registros,
+      'Precio Prom. Nuestro (USD)': +(x._sN / x.Registros).toFixed(2),
+      'Precio Prom. Comp. (USD)': x._nd ? +(x._sC / x._nd).toFixed(2) : '',
+      'Δ% Promedio': x.Registros ? +(x._sd / x.Registros).toFixed(1) : '',
+    })).sort((a, b) => b['Precio Prom. Nuestro (USD)'] - a['Precio Prom. Nuestro (USD)']);
+    if (porTrade.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(porTrade), 'Por Comercio');
+
+    if (!wb.SheetNames.length) { alert('Sin datos para exportar.'); return; }
+    XLSX.writeFile(wb, `CAPTA_Precios_${desde}_${hasta}.xlsx`);
+  } catch(e) { console.error(e); alert('Error al exportar.'); }
+}
+</script>
+</body>
+</html>

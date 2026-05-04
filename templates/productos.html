@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Productos — CAPTA</title>
+</head>
+<body>
+{% include 'navbar.html' %}
+
+<main class="sp-page">
+  <div class="sp-page-hdr">
+    <div>
+      <h1 class="sp-page-title">Productos propios</h1>
+      <p class="sp-page-sub">Gestiona las presentaciones de tus productos y su competencia directa.</p>
+    </div>
+    <span id="count_label" class="sp-bdg sp-bdg-accent" style="font-size:.8rem;padding:4px 14px">— productos</span>
+  </div>
+
+  <!-- Formulario crear -->
+  <div class="sp-card" style="margin-bottom:20px">
+    <p class="sp-sec-title" id="formTitle">Nueva presentación</p>
+    <form id="productForm">
+      <input type="hidden" id="product_id">
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">
+        <div style="flex:2;min-width:200px">
+          <label class="sp-label">Nombre del producto *</label>
+          <input type="text" id="presentation" class="sp-input"
+            placeholder="Ej: Snack Clásico, Bebida Naranja" required
+            oninput="this.value=this.value.toUpperCase()">
+        </div>
+        <div style="flex:0 1 110px;min-width:90px">
+          <label class="sp-label">Gramaje</label>
+          <input type="number" id="gramaje" class="sp-input" placeholder="Ej: 100" min="0" step="0.01">
+        </div>
+        <div style="flex:0 1 100px;min-width:80px">
+          <label class="sp-label">Unidad</label>
+          <select id="unidad" class="sp-select">
+            <option value="">—</option>
+            <option value="g">g</option><option value="kg">kg</option>
+            <option value="ml">ml</option><option value="l">l</option>
+            <option value="oz">oz</option><option value="un">un</option>
+          </select>
+        </div>
+        <div style="flex:1;min-width:160px">
+          <label class="sp-label">Línea</label>
+          <select id="linea_id" class="sp-select"><option value="">Sin línea</option></select>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button type="submit" class="sp-btn sp-btn-primary"><i class="fas fa-plus"></i> Crear</button>
+          <button type="button" id="cancelButton" class="sp-btn sp-btn-sec"
+            style="display:none" onclick="resetForm()">
+            <i class="fas fa-times"></i> Cancelar
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <!-- Buscador + Filtros por línea -->
+  <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px">
+    <div style="position:relative;flex:1;min-width:220px;max-width:360px">
+      <i class="fas fa-search" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:.8rem;pointer-events:none"></i>
+      <input type="text" id="searchInput" class="sp-input" placeholder="Buscar producto…"
+        style="padding-left:32px"
+        oninput="aplicarBusqueda(this.value)">
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+      <span style="font-size:.75rem;color:var(--muted);font-weight:600">Línea:</span>
+      <button id="filtro_todas" class="sp-btn sp-btn-primary sp-btn-sm"
+        style="border-radius:99px" onclick="aplicarFiltro('')">Todas</button>
+      <button id="filtro_sin_linea" class="sp-btn sp-btn-sec sp-btn-sm"
+        style="border-radius:99px" onclick="aplicarFiltro('__sin_linea__')">Sin línea</button>
+      <div id="filtros_lineas" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+    </div>
+  </div>
+
+  <!-- Tabla -->
+  <div class="sp-tbl-wrap">
+    <div style="overflow-x:auto;max-height:65vh">
+      <table class="sp-tbl">
+        <thead><tr>
+          <th>Producto</th><th>Gramaje</th><th>Línea</th><th>Creado</th>
+          <th style="text-align:center">Acciones</th>
+        </tr></thead>
+        <tbody id="productsTableBody">
+          <tr><td colspan="5" style="text-align:center;padding:36px;color:var(--muted)">
+            <i class="fas fa-spinner fa-spin" style="color:var(--accent);display:block;margin-bottom:8px;font-size:1.2rem"></i>Cargando...
+          </td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<!-- ══ MODAL: Editar producto ══════════════════════════════════════════ -->
+<div class="sp-overlay" id="editModal">
+  <div class="sp-modal sp-modal-sm">
+    <div class="sp-modal-hdr">
+      <div class="sp-modal-title">Editar presentación</div>
+      <button class="sp-modal-close" onclick="closeEdit()"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="sp-modal-body">
+      <div style="margin-bottom:12px">
+        <label class="sp-label">Nombre del producto *</label>
+        <input type="text" id="modal_presentation" class="sp-input"
+          oninput="this.value=this.value.toUpperCase()">
+      </div>
+      <div style="display:flex;gap:10px;margin-bottom:12px">
+        <div style="flex:1">
+          <label class="sp-label">Gramaje</label>
+          <input type="number" id="modal_gramaje" class="sp-input" placeholder="Ej: 100" min="0" step="0.01">
+        </div>
+        <div style="flex:1">
+          <label class="sp-label">Unidad</label>
+          <select id="modal_unidad" class="sp-select">
+            <option value="">—</option>
+            <option value="g">g</option><option value="kg">kg</option>
+            <option value="ml">ml</option><option value="l">l</option>
+            <option value="oz">oz</option><option value="un">un</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label class="sp-label">Línea</label>
+        <select id="modal_linea_id" class="sp-select"><option value="">Sin línea</option></select>
+      </div>
+    </div>
+    <div class="sp-modal-footer">
+      <button class="sp-btn sp-btn-sec" onclick="closeEdit()">Cancelar</button>
+      <button class="sp-btn sp-btn-primary" onclick="guardarEdicion()">
+        <i class="fas fa-save"></i> Guardar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: Competencia directa ═══════════════════════════════════════ -->
+<div class="sp-overlay" id="competenciaModal">
+  <div class="sp-modal" style="max-width:620px;width:95%">
+    <div class="sp-modal-hdr">
+      <div>
+        <div class="sp-modal-title">
+          <i class="fas fa-chess-board" style="color:var(--accent);margin-right:6px"></i>
+          Competencia directa
+        </div>
+        <div id="compModalSub" style="font-size:.73rem;color:var(--muted);margin-top:2px">—</div>
+      </div>
+      <button class="sp-modal-close" onclick="closeCompModal()"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="sp-modal-body">
+
+      <!-- Buscador -->
+      <div style="margin-bottom:16px">
+        <label class="sp-label">Agregar competidor a este producto</label>
+        <div style="position:relative">
+          <input type="text" id="compSearch" class="sp-input"
+            placeholder="Buscar por nombre o gramaje…"
+            oninput="filtrarCompetidores(this.value)" autocomplete="off">
+          <div id="compDropdown" style="
+            display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:300;
+            background:var(--card);border:1px solid var(--brd);border-radius:var(--r2);
+            max-height:200px;overflow-y:auto;box-shadow:var(--sh3)">
+          </div>
+        </div>
+        <p style="font-size:.7rem;color:var(--muted);margin-top:4px">
+          Si no ves el competidor, primero agrégalo en el módulo <strong>Competencia</strong>.
+        </p>
+      </div>
+
+      <div style="border-top:1px solid var(--brd);margin-bottom:14px"></div>
+
+      <!-- Lista vinculados -->
+      <p class="sp-sec-title" style="margin-bottom:10px">Competidores vinculados</p>
+      <div id="compLinkedList">
+        <div style="text-align:center;color:var(--muted);padding:20px">
+          <i class="fas fa-spinner fa-spin" style="color:var(--accent)"></i>
+        </div>
+      </div>
+
+    </div>
+    <div class="sp-modal-footer">
+      <button class="sp-btn sp-btn-sec" onclick="closeCompModal()">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const empresaId = localStorage.getItem('empresa_id') || await (async()=>{try{const r=await fetch('/api/dashboard/config');if(r.ok){const d=await r.json();localStorage.setItem('empresa_id',d.empresa_id);localStorage.setItem('empresa_nombre',d.empresa_nombre);return d.empresa_id;}return null;}catch{return null;}})();
+if (!empresaId) { window.location.replace('/'); throw new Error('no session'); }
+
+let allProducts     = [];
+let allLineas       = [];
+let allCompetidores = [];
+let filtroActivo    = '';
+let textoBusqueda   = '';
+let editingId       = null;
+let compProductoId  = null;
+
+const H   = {'Content-Type':'application/json'};
+const fmt = s => s ? new Date(s).toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'2-digit'}) : '—';
+const fmtG = p => p.gramaje ? (p.gramaje % 1 === 0 ? parseInt(p.gramaje) : p.gramaje) + (p.unidad || '') : '—';
+
+// ── Catálogos ───────────────────────────────────────────────────────
+async function loadLineas() {
+  const r = await fetch(`/api/lineas?empresa_id=${empresaId}`);
+  const d = await r.json();
+  allLineas = d.lineas || [];
+  ['linea_id','modal_linea_id'].forEach(sid => {
+    const s = document.getElementById(sid);
+    s.innerHTML = '<option value="">Sin línea</option>';
+    allLineas.forEach(l => s.innerHTML += `<option value="${l.id}">${l.nombre}</option>`);
+  });
+  const c = document.getElementById('filtros_lineas'); c.innerHTML = '';
+  allLineas.forEach(l => {
+    const b = document.createElement('button');
+    b.id = `filtro_${l.id}`; b.className = 'sp-btn sp-btn-sec sp-btn-sm';
+    b.style.borderRadius = '99px'; b.textContent = l.nombre;
+    b.onclick = () => aplicarFiltro(l.id); c.appendChild(b);
+  });
+}
+
+async function loadCompetidores() {
+  const r = await fetch(`/api/competitorproducts?empresa_id=${empresaId}`);
+  const d = r.ok ? await r.json() : {};
+  allCompetidores = d.products || [];
+}
+
+// ── Productos ───────────────────────────────────────────────────────
+async function loadProducts() {
+  const tbody = document.getElementById('productsTableBody');
+  tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:36px;color:var(--muted)">
+    <i class="fas fa-spinner fa-spin" style="color:var(--accent);display:block;margin-bottom:8px"></i>Cargando...</td></tr>`;
+  const r = await fetch(`/api/myproducts?empresa_id=${empresaId}`);
+  if (!r.ok) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--red);padding:24px">Error al cargar</td></tr>';
+    return;
+  }
+  const d = await r.json();
+  allProducts = d.products || [];
+  renderTable();
+}
+
+function renderTable() {
+  const tbody = document.getElementById('productsTableBody');
+  let items = allProducts;
+  if (filtroActivo === '__sin_linea__')    items = allProducts.filter(p => !p.linea_id);
+  else if (filtroActivo)                   items = allProducts.filter(p => String(p.linea_id) === String(filtroActivo));
+
+  // Filtro de texto
+  if (textoBusqueda.trim()) {
+    const q = textoBusqueda.trim().toLowerCase();
+    items = items.filter(p =>
+      (p.presentation||'').toLowerCase().includes(q) ||
+      (p.gramaje ? String(p.gramaje) : '').includes(q) ||
+      (p.unidad||'').toLowerCase().includes(q)
+    );
+  }
+
+  document.getElementById('count_label').textContent = `${items.length} / ${allProducts.length} productos`;
+
+  document.querySelectorAll('[id^="filtro_"]').forEach(b => {
+    b.classList.remove('sp-btn-primary'); b.classList.add('sp-btn-sec');
+  });
+  const ak = filtroActivo === '' ? 'filtro_todas'
+           : filtroActivo === '__sin_linea__' ? 'filtro_sin_linea'
+           : `filtro_${filtroActivo}`;
+  const ab = document.getElementById(ak);
+  if (ab) { ab.classList.add('sp-btn-primary'); ab.classList.remove('sp-btn-sec'); }
+
+  if (!items.length) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:36px">
+      <i class="fas fa-search" style="display:block;margin-bottom:8px;font-size:1.2rem;opacity:.4"></i>
+      Sin productos para este filtro</td></tr>`;
+    return;
+  }
+
+  const lnNombre = id => allLineas.find(l => String(l.id) === String(id))?.nombre;
+
+  tbody.innerHTML = items.map(p => {
+    const ln   = lnNombre(p.linea_id);
+    const lBdg = ln
+      ? `<span class="sp-bdg sp-bdg-teal">${ln}</span>`
+      : '<span class="sp-bdg sp-bdg-def">Sin línea</span>';
+    // highlight búsqueda
+    const hl = (txt) => {
+      if (!textoBusqueda.trim()) return txt;
+      const re = new RegExp(`(${textoBusqueda.trim().replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi');
+      return String(txt).replace(re, '<mark style="background:#fef08a;border-radius:2px">$1</mark>');
+    };
+    return `<tr id="prow-${p.id}">
+      <td class="sp-hi">${hl(p.presentation)}</td>
+      <td style="font-weight:600;color:var(--accent)">${fmtG(p)}</td>
+      <td>${lBdg}</td>
+      <td>${fmt(p.created_at)}</td>
+      <td style="text-align:center">
+        <div style="display:inline-flex;gap:4px">
+          <button onclick="openCompModal('${p.id}')" class="sp-btn sp-btn-sec sp-btn-sm"
+            title="Competencia directa" style="color:var(--accent)">
+            <i class="fas fa-chess-board"></i>
+          </button>
+          <button onclick="openEdit('${p.id}')" class="sp-btn sp-btn-sec sp-btn-sm" title="Editar">
+            <i class="fas fa-pen"></i>
+          </button>
+          <button onclick="deleteProduct('${p.id}')" class="sp-btn sp-btn-danger sp-btn-sm" title="Eliminar">
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+window.aplicarFiltro   = v => { filtroActivo = v; renderTable(); };
+window.aplicarBusqueda = v => { textoBusqueda = v; renderTable(); };
+
+// ── Crear ───────────────────────────────────────────────────────────
+document.getElementById('productForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const id           = document.getElementById('product_id').value;
+  const presentation = document.getElementById('presentation').value.trim().toUpperCase();
+  const gramaje      = parseFloat(document.getElementById('gramaje').value) || null;
+  const unidad       = document.getElementById('unidad').value || null;
+  const linea_id     = document.getElementById('linea_id').value || null;
+  if (!presentation) return;
+
+  const payload = { presentation, gramaje, unidad, linea_id, empresa_id: empresaId };
+  const r = id
+    ? await fetch(`/api/myproducts/${id}`, { method:'PATCH', headers:H, body:JSON.stringify(payload) })
+    : await fetch('/api/myproducts',        { method:'POST',  headers:H, body:JSON.stringify(payload) });
+
+  if (r.ok || r.status === 201) {
+    captaToast(id ? 'Producto actualizado' : 'Producto creado', 'success');
+    resetForm(); loadProducts();
+  } else {
+    const err = await r.json().catch(() => ({}));
+    captaToast(err.error || 'Error al guardar', 'error');
+  }
+});
+
+// ── Modal editar ────────────────────────────────────────────────────
+function openEdit(id) {
+  const p = allProducts.find(x => String(x.id) === String(id)); if (!p) return;
+  editingId = id;
+  document.getElementById('modal_presentation').value = p.presentation;
+  document.getElementById('modal_gramaje').value       = p.gramaje || '';
+  document.getElementById('modal_unidad').value        = p.unidad  || '';
+  document.getElementById('modal_linea_id').value      = p.linea_id || '';
+  document.getElementById('editModal').classList.add('open');
+}
+
+async function guardarEdicion() {
+  if (!editingId) return;
+  const presentation = document.getElementById('modal_presentation').value.trim().toUpperCase();
+  const gramaje      = parseFloat(document.getElementById('modal_gramaje').value) || null;
+  const unidad       = document.getElementById('modal_unidad').value || null;
+  const linea_id     = document.getElementById('modal_linea_id').value || null;
+  if (!presentation) { captaToast('Nombre requerido', 'error'); return; }
+
+  const r = await fetch(`/api/myproducts/${editingId}`, {
+    method: 'PATCH', headers: H,
+    body: JSON.stringify({ presentation, gramaje, unidad, linea_id, empresa_id: empresaId })
+  });
+  if (r.ok) { captaToast('Actualizado', 'success'); closeEdit(); editingId = null; loadProducts(); }
+  else { const err = await r.json().catch(() => ({})); captaToast(err.error || 'Error al guardar', 'error'); }
+}
+
+function closeEdit() { document.getElementById('editModal').classList.remove('open'); }
+document.getElementById('editModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeEdit(); });
+
+// ── Eliminar ────────────────────────────────────────────────────────
+async function deleteProduct(id) {
+  if (!confirm('¿Eliminar esta presentación?')) return;
+  const r = await fetch(`/api/myproducts/${id}?empresa_id=${empresaId}`, { method: 'DELETE' });
+  if (r.ok || r.status === 204) { captaToast('Eliminado', 'success'); loadProducts(); }
+  else captaToast('Error al eliminar', 'error');
+}
+
+function resetForm() {
+  ['product_id','presentation','gramaje'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('unidad').value   = '';
+  document.getElementById('linea_id').value = '';
+  document.getElementById('formTitle').textContent = 'Nueva presentación';
+  document.getElementById('cancelButton').style.display = 'none';
+}
+
+// ── Modal competencia directa ────────────────────────────────────────
+async function openCompModal(productoId) {
+  compProductoId = productoId;
+  const p = allProducts.find(x => String(x.id) === String(productoId));
+  document.getElementById('compModalSub').textContent =
+    p ? `${p.presentation}${p.gramaje ? '  ·  ' + fmtG(p) : ''}` : '—';
+  document.getElementById('compSearch').value = '';
+  document.getElementById('compDropdown').style.display = 'none';
+  document.getElementById('competenciaModal').classList.add('open');
+  await loadCompetenciaVinculada();
+}
+
+function closeCompModal() {
+  document.getElementById('competenciaModal').classList.remove('open');
+  compProductoId = null;
+}
+document.getElementById('competenciaModal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeCompModal();
+});
+
+async function loadCompetenciaVinculada() {
+  const list = document.getElementById('compLinkedList');
+  list.innerHTML = `<div style="text-align:center;color:var(--muted);padding:20px">
+    <i class="fas fa-spinner fa-spin" style="color:var(--accent)"></i></div>`;
+
+  const r = await fetch(`/api/producto_competencia?producto_id=${compProductoId}&empresa_id=${empresaId}`);
+  const d = r.ok ? await r.json() : {};
+  const rels = d.relaciones || [];
+
+  if (!rels.length) {
+    list.innerHTML = `<div style="text-align:center;color:var(--muted);padding:28px;font-size:.83rem">
+      <i class="fas fa-chess-board" style="font-size:1.8rem;display:block;margin-bottom:8px;opacity:.25"></i>
+      Sin competidores vinculados.<br>Usa el buscador de arriba para agregar.
+    </div>`;
+    return;
+  }
+
+  list.innerHTML = rels.map(rel => {
+    const c    = rel.web_competidor || {};
+    const gtxt = c.gramaje ? (c.gramaje % 1 === 0 ? parseInt(c.gramaje) : c.gramaje) + (c.unidad || '') : '';
+    return `<div style="display:flex;align-items:center;justify-content:space-between;
+      padding:9px 12px;border-radius:var(--r2);margin-bottom:6px;
+      background:var(--inp);border:1px solid var(--brd)">
+      <div>
+        <span style="font-weight:600;font-size:.85rem">${c.presentation || '—'}</span>
+        ${gtxt ? `<span style="font-size:.72rem;color:var(--accent);margin-left:8px;font-weight:700">${gtxt}</span>` : ''}
+      </div>
+      <button onclick="desvincularCompetidor('${rel.id}')"
+        class="sp-btn sp-btn-danger sp-btn-sm" title="Quitar vínculo">
+        <i class="fas fa-unlink"></i>
+      </button>
+    </div>`;
+  }).join('');
+}
+
+function filtrarCompetidores(term) {
+  const dd = document.getElementById('compDropdown');
+  if (!term.trim()) { dd.style.display = 'none'; return; }
+  const q  = term.toLowerCase();
+  const rs = allCompetidores.filter(c =>
+    c.presentation.toLowerCase().includes(q) ||
+    (c.gramaje && String(c.gramaje).includes(q))
+  );
+  if (!rs.length) { dd.style.display = 'none'; return; }
+  dd.innerHTML = rs.map(c => {
+    const gtxt = c.gramaje ? (c.gramaje % 1 === 0 ? parseInt(c.gramaje) : c.gramaje) + (c.unidad || '') : '';
+    return `<div onmousedown="vincularCompetidor('${c.id}')"
+      style="padding:9px 14px;cursor:pointer;border-bottom:1px solid var(--brd);font-size:.83rem"
+      onmouseover="this.style.background='var(--hov)'"
+      onmouseout="this.style.background=''">
+      <span style="font-weight:600">${c.presentation}</span>
+      ${gtxt ? `<span style="color:var(--accent);margin-left:8px;font-weight:700">${gtxt}</span>` : ''}
+    </div>`;
+  }).join('');
+  dd.style.display = 'block';
+}
+
+async function vincularCompetidor(competidorId) {
+  document.getElementById('compDropdown').style.display = 'none';
+  document.getElementById('compSearch').value = '';
+  const r = await fetch('/api/producto_competencia', {
+    method: 'POST', headers: H,
+    body: JSON.stringify({ empresa_id: empresaId, producto_id: compProductoId, competidor_id: competidorId })
+  });
+  if (r.ok || r.status === 201) { captaToast('Competidor vinculado', 'success'); await loadCompetenciaVinculada(); }
+  else { const err = await r.json().catch(() => ({})); captaToast(err.error || 'Error al vincular', 'error'); }
+}
+
+async function desvincularCompetidor(relacionId) {
+  if (!confirm('¿Quitar este competidor del producto?')) return;
+  const r = await fetch(`/api/producto_competencia/${relacionId}?empresa_id=${empresaId}`, { method: 'DELETE' });
+  if (r.ok || r.status === 204) { captaToast('Competidor desvinculado', 'success'); await loadCompetenciaVinculada(); }
+  else captaToast('Error al desvincular', 'error');
+}
+
+// Cerrar dropdown al click fuera
+document.addEventListener('click', e => {
+  const s = document.getElementById('compSearch');
+  const d = document.getElementById('compDropdown');
+  if (s && d && !s.contains(e.target) && !d.contains(e.target)) d.style.display = 'none';
+});
+
+// ── Init ─────────────────────────────────────────────────────────────
+window.captaReady(async () => {
+  await loadLineas();
+  await loadCompetidores();
+  await loadProducts();
+});
+</script>
+</body>
+</html>

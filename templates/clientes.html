@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clientes — CAPTA</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+.search-dropdown{position:absolute;z-index:200;width:100%;background:var(--card);border:1px solid var(--brd);border-radius:var(--r2);max-height:220px;overflow-y:auto;box-shadow:var(--sh3)}
+.search-item{padding:9px 12px;cursor:pointer;font-size:.83rem;border-bottom:1px solid var(--brd);transition:background .1s}
+.search-item:hover{background:var(--hov)}
+.linea-tag{font-size:.68rem;background:var(--accent-soft);color:var(--accent);padding:1px 6px;border-radius:99px;margin-left:6px;font-weight:600}
+</style>
+</head>
+<body>
+{% include 'navbar.html' %}
+
+<main class="sp-page">
+  <div class="sp-page-hdr">
+    <div>
+      <h1 class="sp-page-title">Clientes</h1>
+      <p class="sp-page-sub">Gestión de comercios y asignación de presentaciones.</p>
+    </div>
+    <span id="totalCount" class="sp-bdg sp-bdg-accent" style="font-size:.8rem;padding:4px 14px"></span>
+  </div>
+
+  <!-- Formulario agregar -->
+  <div class="sp-card" style="margin-bottom:20px">
+    <p class="sp-sec-title">Agregar cliente</p>
+    <form id="clientForm">
+      <div class="sp-grid sp-g3 sp-gap4" style="margin-bottom:12px">
+        <div><label class="sp-label">Nombre comercial *</label><input type="text" id="trade_name" class="sp-input" required oninput="this.value=this.value.toUpperCase()"></div>
+        <div><label class="sp-label">Dirección</label><input type="text" id="address" class="sp-input"></div>
+        <div><label class="sp-label">Ciudad</label><input type="text" id="city" class="sp-input"></div>
+        <div><label class="sp-label">Teléfono</label><input type="text" id="phone" class="sp-input"></div>
+        <div><label class="sp-label">Código</label><input type="text" id="code" class="sp-input"></div>
+        <div><label class="sp-label">Propietario</label><input type="text" id="owner_full_name" class="sp-input"></div>
+        <div><label class="sp-label">Ruta</label><input type="text" id="route_name" class="sp-input"></div>
+        <div><label class="sp-label">Vendedor</label><input type="text" id="seller_name" class="sp-input"></div>
+        <div><label class="sp-label">Latitud</label><input type="number" id="latitude" class="sp-input" placeholder="Ej: 10.48801" step="any"></div>
+        <div><label class="sp-label">Longitud</label><input type="number" id="longitude" class="sp-input" placeholder="Ej: -66.87919" step="any"></div>
+      </div>
+      <button type="submit" class="sp-btn sp-btn-primary"><i class="fas fa-plus"></i> Agregar Cliente</button>
+    </form>
+  </div>
+
+  <!-- Buscador y lista -->
+  <div style="margin-bottom:12px">
+    <div class="sp-search">
+      <i class="fas fa-search sp-search-ico"></i>
+      <input type="text" id="searchInput" class="sp-input" placeholder="Buscar por nombre, código, ciudad…" oninput="filterAndLoadClients()">
+    </div>
+  </div>
+
+  <!-- Paginación arriba -->
+  <div class="sp-card sp-card-sm" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <button id="prevBtn" onclick="changePage(-1)" class="sp-btn sp-btn-sec sp-btn-sm" disabled><i class="fas fa-chevron-left"></i></button>
+    <span id="pageInfo" style="font-size:.8rem;color:var(--muted)">Página 1</span>
+    <button id="nextBtn" onclick="changePage(1)" class="sp-btn sp-btn-sec sp-btn-sm"><i class="fas fa-chevron-right"></i></button>
+  </div>
+
+  <div class="sp-card">
+    <p class="sp-sec-title">Lista de clientes</p>
+    <ul id="clients" style="list-style:none;display:flex;flex-direction:column;gap:8px"></ul>
+    <p id="noResults" class="hidden" style="text-align:center;color:var(--muted);padding:32px 0">Sin clientes</p>
+  </div>
+</main>
+
+<!-- Modal Detalles -->
+<div class="sp-overlay" id="detailsModal">
+  <div class="sp-modal sp-modal-sm">
+    <div class="sp-modal-hdr"><div class="sp-modal-title">Detalles del Cliente</div>
+      <button class="sp-modal-close" onclick="closeModal('detailsModal')"><i class="fas fa-times"></i></button></div>
+    <div class="sp-modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<!-- Modal Editar -->
+<div class="sp-overlay" id="editModal">
+  <div class="sp-modal">
+    <div class="sp-modal-hdr"><div class="sp-modal-title">Editar Cliente</div>
+      <button class="sp-modal-close" onclick="closeModal('editModal')"><i class="fas fa-times"></i></button></div>
+    <div class="sp-modal-body">
+      <form id="editForm">
+        <input type="hidden" id="edit_id">
+        <div class="sp-grid sp-g2 sp-gap3">
+          <div><label class="sp-label">Nombre comercial *</label><input type="text" id="edit_trade_name" class="sp-input" required oninput="this.value=this.value.toUpperCase()"></div>
+          <div><label class="sp-label">Dirección</label><input type="text" id="edit_address" class="sp-input"></div>
+          <div><label class="sp-label">Ciudad</label><input type="text" id="edit_city" class="sp-input"></div>
+          <div><label class="sp-label">Teléfono</label><input type="text" id="edit_phone" class="sp-input"></div>
+          <div><label class="sp-label">Código</label><input type="text" id="edit_code" class="sp-input"></div>
+          <div><label class="sp-label">Propietario</label><input type="text" id="edit_owner_full_name" class="sp-input"></div>
+          <div><label class="sp-label">Ruta</label><input type="text" id="edit_route_name" class="sp-input"></div>
+          <div><label class="sp-label">Vendedor</label><input type="text" id="edit_seller_name" class="sp-input"></div>
+          <div><label class="sp-label">Latitud</label><input type="number" id="edit_latitude" class="sp-input" placeholder="Ej: 10.48801" step="any"></div>
+          <div><label class="sp-label">Longitud</label><input type="number" id="edit_longitude" class="sp-input" placeholder="Ej: -66.87919" step="any"></div>
+        </div>
+      </form>
+    </div>
+    <div class="sp-modal-footer">
+      <button class="sp-btn sp-btn-sec" onclick="closeModal('editModal')">Cancelar</button>
+      <button class="sp-btn sp-btn-primary" onclick="saveEdit()"><i class="fas fa-save"></i> Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Presentaciones -->
+<div class="sp-overlay" id="productosModal">
+  <div class="sp-modal sp-modal-lg">
+    <div class="sp-modal-hdr">
+      <div><div class="sp-modal-title">Presentaciones asignadas</div>
+        <div style="margin-top:4px"><span class="sp-bdg sp-bdg-accent" id="pm_cliente_badge"></span></div></div>
+      <button class="sp-modal-close" onclick="closeModal('productosModal')"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="sp-modal-body">
+      <!-- Asignar -->
+      <div class="sp-card sp-card-sm" style="margin-bottom:14px">
+        <p class="sp-sec-title" style="margin-bottom:8px">Asignar presentación</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+          <div style="flex:0 0 160px"><label class="sp-label">Filtrar por línea</label>
+            <select id="pm_filtro_linea" class="sp-select" onchange="pm_filtrarProductos()"><option value="">Todas</option></select></div>
+          <div style="flex:1;min-width:200px;position:relative" id="pm_search_wrapper">
+            <label class="sp-label">Buscar presentación</label>
+            <input type="text" id="pm_search_input" class="sp-input" placeholder="Escribe para buscar…" oninput="pm_buscarProducto(this.value)" autocomplete="off">
+            <input type="hidden" id="pm_producto_id_selected">
+            <div id="pm_search_dropdown" class="search-dropdown hidden"></div>
+          </div>
+          <div style="display:flex;align-items:flex-end">
+            <button onclick="asignarProducto()" class="sp-btn sp-btn-primary"><i class="fas fa-plus"></i> Asignar</button>
+          </div>
+        </div>
+        <p id="pm_assign_error" class="hidden" style="color:var(--red);font-size:.78rem"></p>
+        <p id="pm_assign_ok"    class="hidden" style="color:var(--green);font-size:.78rem"></p>
+      </div>
+      <!-- Tabla asignadas -->
+      <div style="overflow-x:auto">
+        <table class="sp-tbl" id="pm_tabla">
+          <thead><tr><th>Presentación</th><th>Línea</th><th style="text-align:center">Estado</th><th style="text-align:center">Quitar</th></tr></thead>
+          <tbody id="pm_tabla_body"><tr><td colspan="4" style="text-align:center;padding:24px;color:var(--muted)">Cargando…</td></tr></tbody>
+        </table>
+      </div>
+      <p style="font-size:.72rem;color:var(--muted);margin-top:8px;text-align:right" id="pm_count_label"></p>
+    </div>
+  </div>
+</div>
+
+<script>
+function waitDb(fn){if(window.db){fn();return;}const t=setInterval(()=>{if(window.db){clearInterval(t);fn();}},50);}
+const db={from:(...a)=>window.db.from(...a)};
+const empresaId=localStorage.getItem('empresa_id')||await(async()=>{try{const r=await fetch('/api/dashboard/config');if(r.ok){const d=await r.json();localStorage.setItem('empresa_id',d.empresa_id);localStorage.setItem('empresa_nombre',d.empresa_nombre);return d.empresa_id;}return null;}catch{return null;}})();
+if(!empresaId){window.location.replace('/');throw new Error('no session');}
+
+let currentPage=1;const clientsPerPage=10;let searchTerm='',totalCount=0;
+let allLineas=[],allProductos=[],pm_cliente_id=null,pm_cliente_name='',pm_search_timer=null,pm_productos_filtrados=[];
+
+waitDb(async()=>{await Promise.all([loadLineas(),loadAllProductos()]);loadClients(1,'');});
+
+async function loadLineas(){const{data}=await db.from('web_lineas').select('id,nombre').eq('empresa_id',empresaId).eq('activa',true).order('nombre');allLineas=data||[];}
+async function loadAllProductos(){const{data}=await db.from('web_myproductos').select('id,presentation,linea_id,web_lineas(nombre)').eq('empresa_id',empresaId).order('presentation');allProductos=data||[];}
+
+async function loadClients(page,term){
+  let q=db.from('web_clientes').select('*',{count:'exact'}).eq('empresa_id',empresaId);
+  if(term)q=q.or(`trade_name.ilike.%${term}%,code.ilike.%${term}%,city.ilike.%${term}%,phone.ilike.%${term}%`);
+  q=q.order('trade_name').range((page-1)*clientsPerPage,(page*clientsPerPage)-1);
+  const{data,count,error}=await q;
+  if(error)return;
+  totalCount=count||0;
+  document.getElementById('totalCount').textContent=`${totalCount} clientes`;
+  document.getElementById('pageInfo').textContent=`Página ${page} / ${Math.ceil(totalCount/clientsPerPage)||1}`;
+  document.getElementById('prevBtn').disabled=page<=1;
+  document.getElementById('nextBtn').disabled=page*clientsPerPage>=totalCount;
+  renderClients(data||[]);
+}
+
+function filterAndLoadClients(){searchTerm=document.getElementById('searchInput').value;currentPage=1;loadClients(1,searchTerm);}
+function changePage(dir){currentPage+=dir;loadClients(currentPage,searchTerm);}
+
+function renderClients(data){
+  const ul=document.getElementById('clients'),no=document.getElementById('noResults');
+  ul.innerHTML='';no.classList.add('hidden');
+  if(!data.length){no.classList.remove('hidden');return;}
+  data.forEach(c=>{
+    const li=document.createElement('li');
+    li.style='padding:14px;border:1px solid var(--brd);border-radius:var(--r2);background:var(--inp);display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px';
+    li.innerHTML=`<div>
+      <strong style="color:var(--accent);font-size:.95rem">${c.trade_name}</strong>
+      <p style="font-size:.75rem;color:var(--muted);margin-top:2px">${[c.city,c.code,c.phone].filter(Boolean).join(' · ')}</p>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button onclick="viewDetails('${c.id}')" class="sp-btn sp-btn-sec sp-btn-sm"><i class="fas fa-eye"></i></button>
+      <button onclick="openEditModal('${c.id}')" class="sp-btn sp-btn-amber sp-btn-sm"><i class="fas fa-pen"></i></button>
+      <button onclick="openProductosModal('${c.id}','${c.trade_name.replace(/'/g,"\\'")}')" class="sp-btn sp-btn-success sp-btn-sm"><i class="fas fa-box-open"></i> Presentaciones</button>
+      <button onclick="deleteClient('${c.id}')" class="sp-btn sp-btn-danger sp-btn-sm"><i class="fas fa-trash"></i></button>
+    </div>`;
+    ul.appendChild(li);
+  });
+}
+
+document.getElementById('clientForm').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const payload={empresa_id:empresaId,trade_name:document.getElementById('trade_name').value.trim().toUpperCase(),address:document.getElementById('address').value.trim()||null,city:document.getElementById('city').value.trim()||null,phone:document.getElementById('phone').value.trim()||null,code:document.getElementById('code').value.trim()||null,owner_full_name:document.getElementById('owner_full_name').value.trim()||null,route_name:document.getElementById('route_name').value.trim()||null,seller_name:document.getElementById('seller_name').value.trim()||null,latitude:parseFloat(document.getElementById('latitude').value)||null,longitude:parseFloat(document.getElementById('longitude').value)||null};
+  const{error}=await db.from('web_clientes').insert([payload]);
+  if(error){captaToast('Error: '+error.message,'error');return;}
+  captaToast('Cliente agregado','success');document.getElementById('clientForm').reset();loadClients(currentPage,searchTerm);
+});
+
+async function viewDetails(id){
+  const{data:c}=await db.from('web_clientes').select('*').eq('id',id).single();
+  if(!c)return;
+  const fields=[['Nombre',c.trade_name],['Dirección',c.address],['Ciudad',c.city],['Teléfono',c.phone],['Código',c.code],['Propietario',c.owner_full_name],['Ruta',c.route_name],['Vendedor',c.seller_name]];
+  document.getElementById('modalBody').innerHTML=fields.filter(([,v])=>v).map(([l,v])=>`<div style="display:flex;gap:8px;padding:8px 0;border-bottom:1px solid var(--brd)"><span style="font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;width:90px;flex-shrink:0">${l}</span><span style="font-size:.83rem">${v}</span></div>`).join('');
+  document.getElementById('detailsModal').classList.add('open');
+}
+
+async function openEditModal(id){
+  const{data:c}=await db.from('web_clientes').select('*').eq('id',id).single();
+  if(!c)return;
+  document.getElementById('edit_id').value=c.id;
+  ['trade_name','address','city','phone','code','owner_full_name','route_name','seller_name'].forEach(f=>{const el=document.getElementById('edit_'+f);if(el)el.value=c[f]||'';});
+  document.getElementById('edit_latitude').value=c.latitude||'';
+  document.getElementById('edit_longitude').value=c.longitude||'';
+  document.getElementById('editModal').classList.add('open');
+}
+
+async function saveEdit(){
+  const id=document.getElementById('edit_id').value;
+  const payload={trade_name:document.getElementById('edit_trade_name').value.trim().toUpperCase(),address:document.getElementById('edit_address').value.trim()||null,city:document.getElementById('edit_city').value.trim()||null,phone:document.getElementById('edit_phone').value.trim()||null,code:document.getElementById('edit_code').value.trim()||null,owner_full_name:document.getElementById('edit_owner_full_name').value.trim()||null,route_name:document.getElementById('edit_route_name').value.trim()||null,seller_name:document.getElementById('edit_seller_name').value.trim()||null,latitude:parseFloat(document.getElementById('edit_latitude').value)||null,longitude:parseFloat(document.getElementById('edit_longitude').value)||null};
+  const{error}=await db.from('web_clientes').update(payload).eq('id',id).eq('empresa_id',empresaId);
+  if(error){captaToast('Error: '+error.message,'error');return;}
+  captaToast('Actualizado','success');closeModal('editModal');loadClients(currentPage,searchTerm);
+}
+
+async function deleteClient(id){
+  if(!confirm('¿Eliminar este cliente? Sus presentaciones asignadas también se eliminarán.'))return;
+  await db.from('web_cliente_productos').delete().eq('cliente_id',id).eq('empresa_id',empresaId);
+  const{error}=await db.from('web_clientes').delete().eq('id',id).eq('empresa_id',empresaId);
+  if(error){captaToast('Error','error');return;}
+  captaToast('Cliente eliminado','success');loadClients(currentPage,searchTerm);
+}
+
+/* ── Modal Presentaciones ── */
+async function openProductosModal(cid,cname){
+  pm_cliente_id=cid;pm_cliente_name=cname;
+  document.getElementById('pm_cliente_badge').textContent=cname;
+  document.getElementById('pm_search_input').value='';document.getElementById('pm_producto_id_selected').value='';
+  document.getElementById('pm_search_dropdown').classList.add('hidden');
+  hideMsg('pm_assign_error');hideMsg('pm_assign_ok');
+  const linSel=document.getElementById('pm_filtro_linea');linSel.innerHTML='<option value="">Todas las líneas</option>';
+  allLineas.forEach(l=>linSel.innerHTML+=`<option value="${l.id}">${l.nombre}</option>`);
+  pm_productos_filtrados=[...allProductos];
+  document.getElementById('productosModal').classList.add('open');
+  await cargarTablaPresentaciones();
+}
+
+function pm_filtrarProductos(){
+  const lid=document.getElementById('pm_filtro_linea').value;
+  pm_productos_filtrados=lid?allProductos.filter(p=>p.linea_id===lid):[...allProductos];
+  document.getElementById('pm_search_input').value='';document.getElementById('pm_producto_id_selected').value='';
+  document.getElementById('pm_search_dropdown').classList.add('hidden');
+}
+
+function pm_buscarProducto(term){
+  document.getElementById('pm_producto_id_selected').value='';clearTimeout(pm_search_timer);
+  const dd=document.getElementById('pm_search_dropdown');
+  if(!term.trim()){dd.classList.add('hidden');return;}
+  pm_search_timer=setTimeout(()=>{
+    const tl=term.toLowerCase();const res=pm_productos_filtrados.filter(p=>p.presentation?.toLowerCase().includes(tl)).slice(0,20);
+    dd.innerHTML='';
+    if(!res.length)dd.innerHTML=`<div class="search-item" style="color:var(--muted)">Sin resultados</div>`;
+    else res.forEach(p=>{const d=document.createElement('div');d.className='search-item';const ln=p.web_lineas?.nombre||'';d.innerHTML=`${p.presentation}<span class="linea-tag">${ln}</span>`;d.onclick=()=>{document.getElementById('pm_search_input').value=p.presentation;document.getElementById('pm_producto_id_selected').value=p.id;dd.classList.add('hidden');};dd.appendChild(d);});
+    dd.classList.remove('hidden');
+  },200);
+}
+
+document.addEventListener('click',e=>{const w=document.getElementById('pm_search_wrapper');if(w&&!w.contains(e.target))document.getElementById('pm_search_dropdown')?.classList.add('hidden');});
+
+async function asignarProducto(){
+  const pid=document.getElementById('pm_producto_id_selected').value;
+  hideMsg('pm_assign_error');hideMsg('pm_assign_ok');
+  if(!pid){showMsg('pm_assign_error','Selecciona una presentación de la lista.');return;}
+  const{data:dup}=await db.from('web_cliente_productos').select('id').eq('cliente_id',pm_cliente_id).eq('producto_id',pid).eq('empresa_id',empresaId).maybeSingle();
+  if(dup){showMsg('pm_assign_error','Ya está asignada.');return;}
+  const{error}=await db.from('web_cliente_productos').insert([{cliente_id:pm_cliente_id,producto_id:pid,empresa_id:empresaId,activa:true}]);
+  if(error){showMsg('pm_assign_error','Error: '+error.message);return;}
+  showMsg('pm_assign_ok','Asignada correctamente.');document.getElementById('pm_search_input').value='';document.getElementById('pm_producto_id_selected').value='';
+  await cargarTablaPresentaciones();
+}
+
+async function cargarTablaPresentaciones(){
+  const tbody=document.getElementById('pm_tabla_body');tbody.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:16px">Cargando…</td></tr>';
+  const{data,error}=await db.from('web_cliente_productos').select('id,activa,web_myproductos!web_cliente_productos_producto_id_fkey(presentation,linea_id,web_lineas(nombre))').eq('cliente_id',pm_cliente_id).eq('empresa_id',empresaId).order('id');
+  if(error){tbody.innerHTML='<tr><td colspan="4" style="color:var(--red);text-align:center;padding:16px">Error</td></tr>';return;}
+  document.getElementById('pm_count_label').textContent=`${data?.length||0} presentaciones`;
+  if(!data?.length){tbody.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:24px">Sin presentaciones asignadas</td></tr>';return;}
+  tbody.innerHTML=data.map(a=>{
+    const p=a.web_myproductos;const ln=p?.web_lineas?.nombre||'';
+    const bdg=a.activa?'sp-bdg-ok':'sp-bdg-def';const lbl=a.activa?'Activa':'Inactiva';
+    return`<tr><td class="sp-hi">${p?.presentation||'—'}</td><td>${ln?`<span class="sp-bdg sp-bdg-teal">${ln}</span>`:'—'}</td>
+    <td style="text-align:center"><span class="sp-bdg ${bdg}">${lbl}</span></td>
+    <td style="text-align:center"><button onclick="quitarPresentacion('${a.id}')" class="sp-btn sp-btn-danger sp-btn-sm"><i class="fas fa-times"></i></button></td></tr>`;
+  }).join('');
+}
+
+async function quitarPresentacion(aid){
+  if(!confirm('¿Quitar esta presentación?'))return;
+  const{error}=await db.from('web_cliente_productos').delete().eq('id',aid).eq('empresa_id',empresaId);
+  if(error){captaToast('Error','error');return;}
+  await cargarTablaPresentaciones();
+}
+
+function showMsg(id,msg){const el=document.getElementById(id);if(el){el.textContent=msg;el.classList.remove('hidden');}}
+function hideMsg(id){const el=document.getElementById(id);if(el)el.classList.add('hidden');}
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+['detailsModal','editModal','productosModal'].forEach(id=>document.getElementById(id)?.addEventListener('click',e=>{if(e.target===e.currentTarget)closeModal(id);}));
+</script>
+</body>
+</html>

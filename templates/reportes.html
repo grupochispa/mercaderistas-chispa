@@ -1,0 +1,1340 @@
+{% include 'navbar.html' %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Reportes — CAPTA</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --ink:#0f172a;--ink2:#334155;--ink3:#64748b;--ink4:#94a3b8;
+  --bg:#f1f5f9;--card:#ffffff;--brd:#e2e8f0;--brd2:#cbd5e1;
+  --acc:#4f46e5;--acc2:#6366f1;--acc3:#c7d2fe;
+  --grn:#059669;--red:#dc2626;--amb:#d97706;--cyn:#0891b2;--vio:#7c3aed;
+  --r:14px;--r2:10px;--r3:8px;
+  --sh:0 1px 3px rgba(0,0,0,.06),0 4px 16px rgba(0,0,0,.04);
+}
+.dark{
+  --ink:#f1f5f9;--ink2:#cbd5e1;--ink3:#94a3b8;--ink4:#64748b;
+  --bg:#0f172a;--card:#1e293b;--brd:#334155;--brd2:#475569;
+  --grn:#34d399;--red:#f87171;--amb:#fbbf24;--cyn:#22d3ee;
+}
+body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(--ink);min-height:100vh}
+.page{max-width:1440px;margin:0 auto;padding:0 0 60px}
+
+/* HEADER */
+.rp-hdr{background:var(--card);border-bottom:1px solid var(--brd);padding:20px 28px;display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:14px;position:sticky;top:60px;z-index:40}
+.rp-title{font-size:1.2rem;font-weight:800;letter-spacing:-.02em;color:var(--ink)}
+.rp-sub{font-size:.75rem;color:var(--ink3);margin-top:2px}
+
+/* FILTROS */
+.filtros-bar{background:var(--card);border-bottom:1px solid var(--brd);padding:12px 28px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.f-group{display:flex;flex-direction:column;gap:3px}
+.f-label{font-size:.63rem;text-transform:uppercase;letter-spacing:.07em;color:var(--ink3);font-weight:600}
+.f-inp,.f-sel{height:34px;border:1px solid var(--brd2);border-radius:var(--r3);background:var(--bg);color:var(--ink);padding:0 10px;font-size:.8rem;font-family:'Plus Jakarta Sans',sans-serif;outline:none;transition:border .15s;min-width:130px}
+.f-inp:focus,.f-sel:focus{border-color:var(--acc);background:var(--card)}
+.btn-apply{height:34px;padding:0 16px;background:var(--acc);color:#fff;border:none;border-radius:var(--r3);font-size:.8rem;font-weight:600;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif;transition:background .15s}
+.btn-apply:hover{background:#4338ca}
+.btn-reset{height:34px;padding:0 12px;background:none;border:1px solid var(--brd2);border-radius:var(--r3);color:var(--ink3);font-size:.8rem;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif}
+.btn-reset:hover{border-color:var(--red);color:var(--red)}
+
+/* KPI STRIP */
+.kpi-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;padding:20px 28px;background:var(--bg)}
+.kpi{background:var(--card);border:1px solid var(--brd);border-radius:var(--r);padding:16px 18px;border-top:3px solid var(--k-c,var(--acc));cursor:default}
+.kpi-val{font-size:1.5rem;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--ink);line-height:1}
+.kpi-lbl{font-size:.68rem;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;margin-top:4px}
+
+/* TABS */
+.tabs-bar{background:var(--card);border-bottom:1px solid var(--brd);padding:0 28px;display:flex;gap:0;overflow-x:auto;position:sticky;top:118px;z-index:39}
+.tab{padding:14px 18px;font-size:.82rem;font-weight:600;color:var(--ink3);cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap;transition:all .15s;border:none;background:none;font-family:'Plus Jakarta Sans',sans-serif}
+.tab:hover{color:var(--acc)}
+.tab.active{color:var(--acc);border-bottom-color:var(--acc)}
+
+/* CONTENT */
+.tab-content{display:none;padding:24px 28px}
+.tab-content.active{display:block}
+.section-hdr{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:18px}
+.section-title{font-size:1rem;font-weight:700;color:var(--ink)}
+.section-sub{font-size:.78rem;color:var(--ink3);margin-top:2px}
+.export-btns{display:flex;gap:8px;flex-wrap:wrap}
+
+/* CHART CARD */
+.chart-card{background:var(--card);border:1px solid var(--brd);border-radius:var(--r);padding:20px;margin-bottom:20px}
+.chart-card-title{font-size:.88rem;font-weight:700;color:var(--ink2);margin-bottom:14px;display:flex;align-items:center;gap:6px}
+.chart-card-title span{font-size:.72rem;font-weight:500;color:var(--ink4);background:var(--bg);padding:2px 8px;border-radius:99px;border:1px solid var(--brd)}
+.chart-wrap{position:relative}
+
+/* GRID 2 COL */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px}
+@media(max-width:900px){.grid2,.grid3{grid-template-columns:1fr}}
+
+/* TABLA INTERNA */
+.rp-tbl-wrap{overflow-x:auto;max-height:400px}
+.rp-tbl{width:100%;border-collapse:collapse;font-size:.8rem}
+.rp-tbl th{position:sticky;top:0;background:var(--bg);padding:9px 12px;text-align:left;font-size:.65rem;text-transform:uppercase;letter-spacing:.07em;color:var(--ink3);border-bottom:2px solid var(--brd);z-index:2}
+.rp-tbl td{padding:9px 12px;border-bottom:1px solid var(--brd);vertical-align:middle;color:var(--ink)}
+.rp-tbl tr:hover td{background:rgba(79,70,229,.03)}
+.rp-tbl tr:last-child td{border-bottom:none}
+.badge{display:inline-block;padding:2px 8px;border-radius:99px;font-size:.68rem;font-weight:600}
+.badge-grn{background:#dcfce7;color:#15803d}
+.badge-red{background:#fee2e2;color:#dc2626}
+.badge-amb{background:#fef3c7;color:#d97706}
+.badge-blu{background:#dbeafe;color:#1d4ed8}
+.badge-vio{background:#ede9fe;color:#6d28d9}
+
+/* PROMOTOR RANKING */
+.prom-card{background:var(--card);border:1px solid var(--brd);border-radius:var(--r);padding:16px;display:flex;align-items:center;gap:14px;margin-bottom:10px;transition:box-shadow .15s}
+.prom-card:hover{box-shadow:var(--sh)}
+.prom-rank{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:.9rem;flex-shrink:0}
+.rank-1{background:#fef3c7;color:#92400e}
+.rank-2{background:#f1f5f9;color:#475569}
+.rank-3{background:#fce7f3;color:#9d174d}
+.rank-n{background:var(--bg);color:var(--ink3)}
+.prom-info{flex:1}
+.prom-name{font-weight:700;font-size:.88rem;color:var(--ink)}
+.prom-sub{font-size:.72rem;color:var(--ink3);margin-top:2px}
+.prom-bars{flex:2;display:flex;flex-direction:column;gap:4px}
+.bar-row{display:flex;align-items:center;gap:8px;font-size:.7rem}
+.bar-lbl{color:var(--ink3);width:80px;flex-shrink:0}
+.bar-track{flex:1;height:6px;background:var(--brd);border-radius:99px;overflow:hidden}
+.bar-fill{height:100%;border-radius:99px;transition:width .6s}
+.bar-val{color:var(--ink2);font-weight:600;width:36px;text-align:right;flex-shrink:0}
+
+/* PREDICCIÓN */
+.pred-card{background:linear-gradient(135deg,#ede9fe,#dbeafe);border:1px solid #c7d2fe;border-radius:var(--r);padding:20px;margin-bottom:14px}
+.pred-title{font-weight:700;color:#3730a3;font-size:.9rem;margin-bottom:6px}
+.pred-text{font-size:.82rem;color:#4338ca;line-height:1.6}
+.sug-card{background:var(--card);border:1px solid var(--brd);border-left:4px solid var(--k-c,var(--acc));border-radius:var(--r3);padding:14px 16px;margin-bottom:10px}
+.sug-title{font-weight:700;font-size:.85rem;color:var(--ink);margin-bottom:4px}
+.sug-text{font-size:.78rem;color:var(--ink3);line-height:1.5}
+
+/* EXPORT MODAL */
+.overlay{display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);align-items:center;justify-content:center}
+.overlay.open{display:flex}
+.exp-modal{background:var(--card);border-radius:var(--r);width:min(480px,95vw);box-shadow:0 24px 80px rgba(0,0,0,.25)}
+.exp-hdr{padding:20px 24px;border-bottom:1px solid var(--brd);font-size:1rem;font-weight:700;display:flex;align-items:center;justify-content:space-between}
+.exp-body{padding:20px 24px}
+.exp-footer{padding:16px 24px;border-top:1px solid var(--brd);display:flex;gap:10px;justify-content:flex-end}
+.opt-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--brd)}
+.opt-row:last-child{border-bottom:none}
+.opt-row input[type=checkbox]{width:16px;height:16px;accent-color:var(--acc)}
+.opt-lbl{font-size:.85rem;color:var(--ink);font-weight:500}
+.opt-sub{font-size:.72rem;color:var(--ink3);margin-top:1px}
+
+/* LOADING */
+.ld{display:flex;align-items:center;justify-content:center;gap:8px;padding:40px;color:var(--ink3);font-size:.88rem}
+.ld-dot{width:6px;height:6px;background:var(--acc);border-radius:50%;display:inline-block;animation:ld .8s infinite;margin:0 2px}
+.ld-dot:nth-child(2){animation-delay:.15s}.ld-dot:nth-child(3){animation-delay:.3s}
+@keyframes ld{0%,80%,100%{transform:translateY(0)}40%{transform:translateY(-7px)}}
+.spin{width:13px;height:13px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite;display:none;vertical-align:middle}
+@keyframes sp{to{transform:rotate(360deg)}}
+.empty{text-align:center;padding:40px;color:var(--ink4);font-size:.85rem}
+
+/* BTN STYLES */
+.btn{display:inline-flex;align-items:center;gap:5px;font-size:.78rem;font-weight:600;padding:7px 13px;border-radius:var(--r3);border:none;cursor:pointer;transition:all .15s;font-family:'Plus Jakarta Sans',sans-serif}
+.btn-pdf{background:#dc2626;color:#fff}.btn-pdf:hover{background:#b91c1c}
+.btn-xl{background:#059669;color:#fff}.btn-xl:hover{background:#047857}
+.btn-sec{background:var(--bg);color:var(--ink2);border:1px solid var(--brd)}.btn-sec:hover{border-color:var(--acc);color:var(--acc)}
+.btn-close{background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--ink3);padding:2px 6px;border-radius:4px}.btn-close:hover{background:var(--brd)}
+
+/* PDF RENDER ZONE */
+#pdfZone{position:fixed;left:-9999px;top:0;width:880px;background:#fff;font-family:'Plus Jakarta Sans',sans-serif;padding:0;z-index:-1}
+</style>
+</head>
+<body>
+
+<div class="page">
+
+<!-- HEADER -->
+<div class="rp-hdr">
+  <div>
+    <div class="rp-title">📊 Centro de Reportes CAPTA</div>
+    <div class="rp-sub" id="rp-context">Cargando datos...</div>
+  </div>
+  <div class="export-btns">
+    <button class="btn btn-pdf" onclick="openExpModal('pdf')">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      Exportar PDF <span class="spin" id="spin-pdf"></span>
+    </button>
+    <button class="btn btn-xl" onclick="openExpModal('xlsx')">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+      Exportar Excel <span class="spin" id="spin-xl"></span>
+    </button>
+  </div>
+</div>
+
+<!-- FILTROS -->
+<div class="filtros-bar">
+  <div class="f-group"><span class="f-label">Desde</span><input type="date" class="f-inp" id="fDesde"></div>
+  <div class="f-group"><span class="f-label">Hasta</span><input type="date" class="f-inp" id="fHasta"></div>
+  <div class="f-group"><span class="f-label">Promotor</span><select class="f-sel" id="fPromotor"><option value="">Todos</option></select></div>
+  <div class="f-group"><span class="f-label">Estado</span><select class="f-sel" id="fEstado"><option value="">Todos</option></select></div>
+  <div class="f-group"><span class="f-label">Zona</span><select class="f-sel" id="fZona"><option value="">Todas</option></select></div>
+  <div class="f-group"><span class="f-label">Comercio</span><select class="f-sel" id="fComercio"><option value="">Todos</option></select></div>
+  <div class="f-group"><span class="f-label">Producto</span><select class="f-sel" id="fProducto"><option value="">Todos</option></select></div>
+  <div class="f-group"><span class="f-label">Línea</span><select class="f-sel" id="fLinea"><option value="">Todas</option></select></div>
+  <div class="f-group"><span class="f-label">Tipo</span>
+    <select class="f-sel" id="fTipo"><option value="">Todos</option><option value="No">Detal</option><option value="Si">Mayorista</option></select>
+  </div>
+  <button class="btn-apply" onclick="aplicar()"><i class="fas fa-filter"></i> Aplicar</button>
+  <button class="btn-reset" onclick="resetFiltros()">✕ Limpiar</button>
+</div>
+
+<!-- KPIs -->
+<div class="kpi-strip" id="kpiStrip">
+  <div class="ld"><span class="ld-dot"></span><span class="ld-dot"></span><span class="ld-dot"></span></div>
+</div>
+
+<!-- TABS -->
+<div class="tabs-bar" id="tabsBar">
+  <button class="tab active" onclick="showTab('gerencial',this)">📋 Gerencial</button>
+  <button class="tab" onclick="showTab('precios',this)">💰 Precios</button>
+  <button class="tab" onclick="showTab('anaquel',this)">📐 Anaquel</button>
+  <button class="tab" onclick="showTab('caras',this)">👁 Caras / SOS</button>
+  <button class="tab" onclick="showTab('stock',this)">📦 Stock</button>
+  <button class="tab" onclick="showTab('promotores',this)">🏆 Promotores</button>
+  <button class="tab" onclick="showTab('espacios',this)">🏪 Espacios</button>
+  <button class="tab" onclick="showTab('proyeccion',this)">📈 Proyecciones</button>
+</div>
+
+<!-- ══ TAB: GERENCIAL ══ -->
+<div class="tab-content active" id="tab-gerencial">
+  <div class="section-hdr">
+    <div><div class="section-title">Resumen Ejecutivo</div><div class="section-sub">Visión general del período seleccionado</div></div>
+    <div class="export-btns"><button class="btn btn-pdf" onclick="dlTabPDF('gerencial')">PDF</button><button class="btn btn-xl" onclick="dlTabXLS('gerencial')">Excel</button></div>
+  </div>
+  <div class="grid2">
+    <div class="chart-card"><div class="chart-card-title">Visitas por día <span>Tendencia</span></div><div class="chart-wrap" style="height:220px"><canvas id="c-ger-dias"></canvas></div></div>
+    <div class="chart-card"><div class="chart-card-title">Visitas por promotor <span>Top</span></div><div class="chart-wrap" style="height:220px"><canvas id="c-ger-prom"></canvas></div></div>
+    <div class="chart-card"><div class="chart-card-title">Distribución por estado <span>Mapa</span></div><div class="chart-wrap" style="height:220px"><canvas id="c-ger-estado"></canvas></div></div>
+    <div class="chart-card"><div class="chart-card-title">Confirmación GPS por semana <span>%</span></div><div class="chart-wrap" style="height:220px"><canvas id="c-ger-gps"></canvas></div></div>
+  </div>
+  <div class="chart-card"><div class="chart-card-title">Top 15 comercios más visitados</div>
+    <div class="rp-tbl-wrap"><table class="rp-tbl" id="t-ger-comercios"><thead><tr><th>#</th><th>Comercio</th><th>Visitas</th><th>GPS %</th><th>Estado</th></tr></thead><tbody></tbody></table></div>
+  </div>
+</div>
+
+<!-- ══ TAB: PRECIOS ══ -->
+<div class="tab-content" id="tab-precios">
+  <div class="section-hdr">
+    <div><div class="section-title">Análisis de Precios</div><div class="section-sub">Precios propios vs competencia directa en USD</div></div>
+    <div class="export-btns"><button class="btn btn-pdf" onclick="dlTabPDF('precios')">PDF</button><button class="btn btn-xl" onclick="dlTabXLS('precios')">Excel</button></div>
+  </div>
+  <div class="grid2">
+    <div class="chart-card"><div class="chart-card-title">Precio promedio USD por producto <span>Nuestros</span></div><div class="chart-wrap" style="height:260px"><canvas id="c-pre-prod"></canvas></div></div>
+    <div class="chart-card"><div class="chart-card-title">Nuestros vs Competencia <span>Comparativa</span></div><div class="chart-wrap" style="height:260px"><canvas id="c-pre-comp"></canvas></div></div>
+    <div class="chart-card"><div class="chart-card-title">Evolución de precio en el tiempo <span>Tendencia</span></div><div class="chart-wrap" style="height:220px"><canvas id="c-pre-tend"></canvas></div></div>
+    <div class="chart-card"><div class="chart-card-title">Distribución por moneda <span>Mix</span></div><div class="chart-wrap" style="height:220px"><canvas id="c-pre-moneda"></canvas></div></div>
+  </div>
+  <div class="chart-card"><div class="chart-card-title">Detalle de precios por visita</div>
+    <div class="rp-tbl-wrap"><table class="rp-tbl" id="t-pre-detalle"><thead><tr><th>Fecha</th><th>Promotor</th><th>Comercio</th><th>Producto</th><th>Precio orig.</th><th>USD</th><th>Comp. directo</th><th>USD comp.</th><th>Δ%</th></tr></thead><tbody></tbody></table></div>
+  </div>
+</div>
+
+<!-- ══ TAB: ANAQUEL ══ -->
+<div class="tab-content" id="tab-anaquel">
+  <div class="section-hdr">
+    <div><div class="section-title">Metros de Anaquel</div><div class="section-sub">Share of Shelf — espacio propio vs competencia</div></div>
+    <div class="export-btns"><button class="btn btn-pdf" onclick="dlTabPDF('anaquel')">PDF</button><button class="btn btn-xl" onclick="dlTabXLS('anaquel')">Excel</button></div>
+  </div>
+  <div class="grid2">
+    <div class="chart-card"><div class="chart-card-title">Metros propios por producto <span>Top 10</span></div><div class="chart-wrap" style="height:280px"><canvas id="c-an-prod"></canvas></div></div>
+    <div class="chart-card"><div class="chart-card-title">SOS — Propios vs Competencia <span>Donut</span></div><div class="chart-wrap" style="height:280px"><canvas id="c-an-sos"></canvas></div></div>
+    <div class="chart-card" style="grid-column:1/-1"><div class="chart-card-title">Top 15 comercios por metros propios <span>Ranking</span></div><div class="chart-wrap" style="height:300px"><canvas id="c-an-trade"></canvas></div></div>
+  </div>
+</div>
+
+<!-- ══ TAB: CARAS ══ -->
+<div class="tab-content" id="tab-caras">
+  <div class="section-hdr">
+    <div><div class="section-title">Caras de Anaquel / SOS</div><div class="section-sub">Frentes antes y después de la intervención del promotor</div></div>
+    <div class="export-btns"><button class="btn btn-pdf" onclick="dlTabPDF('caras')">PDF</button><button class="btn btn-xl" onclick="dlTabXLS('caras')">Excel</button></div>
+  </div>
+  <div class="grid2">
+    <div class="chart-card"><div class="chart-card-title">Caras antes vs después <span>Promedio por día</span></div><div class="chart-wrap" style="height:240px"><canvas id="c-car-tend"></canvas></div></div>
+    <div class="chart-card"><div class="chart-card-title">Ganancia neta de caras por promotor <span>Δ caras</span></div><div class="chart-wrap" style="height:240px"><canvas id="c-car-prom"></canvas></div></div>
+    <div class="chart-card" style="grid-column:1/-1"><div class="chart-card-title">SOS total — Caras propias vs caras competencia <span>Acumulado</span></div><div class="chart-wrap" style="height:200px"><canvas id="c-car-sos"></canvas></div></div>
+  </div>
+</div>
+
+<!-- ══ TAB: STOCK ══ -->
+<div class="tab-content" id="tab-stock">
+  <div class="section-hdr">
+    <div><div class="section-title">Control de Stock</div><div class="section-sub">Quiebres de inventario reportados en campo</div></div>
+    <div class="export-btns"><button class="btn btn-pdf" onclick="dlTabPDF('stock')">PDF</button><button class="btn btn-xl" onclick="dlTabXLS('stock')">Excel</button></div>
+  </div>
+  <div class="grid2">
+    <div class="chart-card"><div class="chart-card-title">Productos con más quiebres <span>Frecuencia</span></div><div class="chart-wrap" style="height:260px"><canvas id="c-stk-prod"></canvas></div></div>
+    <div class="chart-card"><div class="chart-card-title">Comercios con más quiebres <span>Top 10</span></div><div class="chart-wrap" style="height:260px"><canvas id="c-stk-trade"></canvas></div></div>
+  </div>
+  <div class="chart-card"><div class="chart-card-title">Detalle de quiebres</div>
+    <div class="rp-tbl-wrap"><table class="rp-tbl" id="t-stk"><thead><tr><th>Fecha</th><th>Promotor</th><th>Comercio</th><th>Producto</th><th>Stock anaquel</th><th>Stock bodega</th></tr></thead><tbody></tbody></table></div>
+  
+    <div class="chart-card" style="grid-column:1/-1">
+      <div class="chart-card-title">🚨 Comercios con mayor frecuencia de stock bajo <span>Requieren atención prioritaria</span></div>
+      <div id="sug-stock-bajo"><div style="color:var(--ink3);font-size:.82rem;text-align:center;padding:24px">Cargando...</div></div>
+    </div></div>
+</div>
+
+<!-- ══ TAB: PROMOTORES ══ -->
+<div class="tab-content" id="tab-promotores">
+  <div class="section-hdr">
+    <div><div class="section-title">Ranking de Promotores</div><div class="section-sub">Cumplimiento de metas, GPS, datos completos y espacios ganados</div></div>
+    <div class="export-btns"><button class="btn btn-pdf" onclick="dlTabPDF('promotores')">PDF</button><button class="btn btn-xl" onclick="dlTabXLS('promotores')">Excel</button></div>
+  </div>
+  <div class="grid3" id="ranking-cards"></div>
+  <div class="grid2" style="margin-top:18px">
+    <div class="chart-card"><div class="chart-card-title">Visitas por promotor <span>Barras</span></div><div class="chart-wrap" style="height:240px"><canvas id="c-prom-vis"></canvas></div></div>
+    <div class="chart-card"><div class="chart-card-title">GPS % por promotor <span>Confirmación</span></div><div class="chart-wrap" style="height:240px"><canvas id="c-prom-gps"></canvas></div></div>
+    <div class="chart-card"><div class="chart-card-title">Metros ganados por promotor <span>Anaquel</span></div><div class="chart-wrap" style="height:220px"><canvas id="c-prom-metros"></canvas></div></div>
+    <div class="chart-card"><div class="chart-card-title">Caras ganadas por promotor <span>Δ caras</span></div><div class="chart-wrap" style="height:220px"><canvas id="c-prom-caras"></canvas></div></div>
+  </div>
+  <div class="chart-card" style="margin-top:18px"><div class="chart-card-title">Tabla completa de desempeño</div>
+    <div class="rp-tbl-wrap"><table class="rp-tbl" id="t-prom"><thead><tr><th>Promotor</th><th>Visitas</th><th>Meta</th><th>Cumpl %</th><th>GPS %</th><th>Metros</th><th>Δ Caras</th><th>Espacios</th><th>Datos completos</th></tr></thead><tbody></tbody></table></div>
+  </div>
+</div>
+
+<!-- ══ TAB: ESPACIOS ══ -->
+<div class="tab-content" id="tab-espacios">
+  <div class="section-hdr">
+    <div><div class="section-title">Espacios Adicionales</div><div class="section-sub">Torres, Cabezales, Paletas y Exhibiciones capturadas en campo</div></div>
+    <div class="export-btns"><button class="btn btn-pdf" onclick="dlTabPDF('espacios')">PDF</button><button class="btn btn-xl" onclick="dlTabXLS('espacios')">Excel</button></div>
+  </div>
+  <div class="grid2">
+    <div class="chart-card"><div class="chart-card-title">Distribución por tipo <span>Donut</span></div><div class="chart-wrap" style="height:250px"><canvas id="c-esp-tipo"></canvas></div></div>
+    <div class="chart-card"><div class="chart-card-title">Top comercios con más espacios <span>Barras</span></div><div class="chart-wrap" style="height:250px"><canvas id="c-esp-trade"></canvas></div></div>
+    <div class="chart-card" style="grid-column:1/-1"><div class="chart-card-title">Espacios por promotor <span>Stacked</span></div><div class="chart-wrap" style="height:220px"><canvas id="c-esp-prom"></canvas></div></div>
+  </div>
+  <div class="chart-card" style="margin-top:18px">
+    <div class="chart-card-title">Espacios agrupados por comercio <span>Click para ver detalle por producto</span></div>
+    <div class="rp-tbl-wrap" style="max-height:500px">
+      <table class="rp-tbl" id="t-esp-grupos">
+        <thead><tr><th>Comercio</th><th>Tipo</th><th>Total Cap.</th><th>Productos</th><th style="width:32px"></th></tr></thead>
+        <tbody><tr><td colspan="5" class="empty">Sin datos</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ══ TAB: PROYECCIONES ══ -->
+<div class="tab-content" id="tab-proyeccion">
+  <div class="section-hdr">
+    <div><div class="section-title">Proyecciones y Análisis Predictivo</div><div class="section-sub">Basado en los datos del período — tendencia lineal</div></div>
+    <div class="export-btns"><button class="btn btn-pdf" onclick="dlTabPDF('proyeccion')">PDF</button><button class="btn btn-xl" onclick="dlTabXLS('proyeccion')">Excel</button></div>
+  </div>
+  <div class="grid2">
+    <div class="chart-card" style="grid-column:1/-1"><div class="chart-card-title">Visitas históricas + proyección 30 días <span>Regresión lineal</span></div><div class="chart-wrap" style="height:280px"><canvas id="c-proy-vis"></canvas></div></div>
+    <div class="chart-card"><div class="chart-card-title">Proyección de precio USD <span>Tendencia</span></div><div class="chart-wrap" style="height:220px"><canvas id="c-proy-precio"></canvas></div></div>
+    <div class="chart-card"><div class="chart-card-title">Proyección metros anaquel <span>Tendencia</span></div><div class="chart-wrap" style="height:220px"><canvas id="c-proy-metros"></canvas></div></div>
+  </div>
+  <div class="chart-card" style="margin-top:4px"><div class="chart-card-title">🤖 Análisis predictivo y sugerencias</div><div id="pred-container"></div></div>
+</div>
+
+</div><!-- /page -->
+
+<!-- MODAL EXPORTAR -->
+<div class="overlay" id="expOverlay">
+  <div class="exp-modal">
+    <div class="exp-hdr"><span id="expModalTitle">Opciones de exportación</span><button class="btn-close" onclick="closeExpModal()">✕</button></div>
+    <div class="exp-body">
+      <div class="opt-row"><input type="checkbox" id="opt-graficos" checked><div><div class="opt-lbl">Incluir gráficos</div><div class="opt-sub">Captura los charts del tab activo en el PDF</div></div></div>
+      <div class="opt-row"><input type="checkbox" id="opt-tablas" checked><div><div class="opt-lbl">Incluir tablas de datos</div><div class="opt-sub">Agrega las tablas de detalle al reporte</div></div></div>
+      <div class="opt-row"><input type="checkbox" id="opt-predicciones" checked><div><div class="opt-lbl">Incluir predicciones y sugerencias</div><div class="opt-sub">Solo aplica al tab de Proyecciones</div></div></div>
+      <div class="opt-row"><input type="checkbox" id="opt-todos-tabs"><div><div class="opt-lbl">Exportar todos los módulos</div><div class="opt-sub">Genera un archivo con todos los reportes</div></div></div>
+    </div>
+    <div class="exp-footer">
+      <button class="btn btn-sec" onclick="closeExpModal()">Cancelar</button>
+      <button class="btn" id="expConfirmBtn" onclick="confirmarExport()" style="background:var(--acc);color:#fff">Generar reporte</button>
+    </div>
+  </div>
+</div>
+
+<div id="pdfZone"></div>
+
+<script>
+// ════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════
+function waitDb(fn){ if(window.db){fn();return;} const t=setInterval(()=>{if(window.db){clearInterval(t);fn();}},50); }
+const $db = a => window.db.from(a);
+const EID  = localStorage.getItem('empresa_id')||'';
+const ENOMBRE = localStorage.getItem('empresa_nombre')||'CAPTA';
+if(!EID) window.location.replace('/');
+
+// Estado
+let allData=[],allProms=[],allLineas=[],allEstados=[],allZonas=[],allClientes=[],tasas=[];
+let filtData=[];
+let charts={};
+let expMode='pdf', activeTab='gerencial';
+
+// Fechas default
+const hoy=new Date();
+const inicioMes=new Date(hoy.getFullYear(),hoy.getMonth(),1);
+document.getElementById('fDesde').value=inicioMes.toISOString().split('T')[0];
+document.getElementById('fHasta').value=hoy.toISOString().split('T')[0];
+
+// ════════════════════════════════════════
+// CARGA
+// ════════════════════════════════════════
+async function boot(){
+  await loadClientesCoords();
+  const [r1,r2,r3,r4,r5,r6] = await Promise.all([
+    $db('web_promotores').select('promoter_id,promoter_name,dias_trabajo').eq('empresa_id',EID).order('promoter_name'),
+    $db('web_lineas').select('id,nombre').eq('empresa_id',EID).eq('activa',true).order('nombre'),
+    $db('web_estados').select('id,nombre').order('nombre'),
+    $db('web_zonas').select('id,nombre,estado_id').order('nombre'),
+    $db('web_tasa').select('fecha,tasa_bs_usd,tasa_cop_usd').order('fecha',{ascending:false}).limit(120),
+    $db('web_clientes').select('id,trade_name,city').eq('empresa_id',EID).order('trade_name'),
+  ]);
+  allProms   = r1.data||[];
+  allLineas  = r2.data||[];
+  allEstados = r3.data||[];
+  allZonas   = r4.data||[];
+  tasas      = r5.data||[];
+  allClientes= r6.data||[];
+
+  const ps=document.getElementById('fPromotor');
+  allProms.forEach(p=>ps.innerHTML+=`<option value="${p.promoter_name}">${p.promoter_name}</option>`);
+  const es=document.getElementById('fEstado');
+  allEstados.forEach(e=>es.innerHTML+=`<option value="${e.nombre}">${e.nombre}</option>`);
+  const zs=document.getElementById('fZona');
+  allZonas.forEach(z=>zs.innerHTML+=`<option value="${z.nombre}">${z.nombre}</option>`);
+  const cs=document.getElementById('fComercio');
+  allClientes.slice(0,200).forEach(c=>cs.innerHTML+=`<option value="${c.trade_name}">${c.trade_name}</option>`);
+  const ls=document.getElementById('fLinea');
+  allLineas.forEach(l=>ls.innerHTML+=`<option value="${l.id}">${l.nombre}</option>`);
+
+  await fetchData();
+}
+
+async function fetchData(){
+  const desde=document.getElementById('fDesde').value;
+  const hasta=document.getElementById('fHasta').value;
+
+  setLoading(true);
+  let q=$db('web_precios').select('*').eq('empresa_id',EID);
+  if(desde) q=q.gte('created_at',desde+'T00:00:00+00:00');
+  if(hasta) q=q.lte('created_at',hasta+'T23:59:59+00:00');
+  q=q.order('created_at',{ascending:false});
+
+  const {data,error}=await q;
+  if(error){console.error(error);setLoading(false);return;}
+  allData=data||[];
+  aplicarFiltros();
+}
+
+function aplicarFiltros(){
+  const prom  =document.getElementById('fPromotor').value;
+  const estado=document.getElementById('fEstado').value;
+  const zona  =document.getElementById('fZona').value;
+  const comerc=document.getElementById('fComercio').value;
+  const prod  =document.getElementById('fProducto').value;
+  const linea =document.getElementById('fLinea').value;
+  const tipo  =document.getElementById('fTipo').value;
+
+  filtData=allData.filter(r=>{
+    if(prom   && r.promoter_name!==prom)   return false;
+    if(estado && r.state!==estado)          return false;
+    if(zona   && r.zone!==zona)             return false;
+    if(comerc && r.trade!==comerc)          return false;
+    if(linea  && String(r.linea_id)!==String(linea)) return false;
+    if(tipo   && r.p_mayorista!==tipo)      return false;
+    if(prod){
+      const items=parseJ(r.myitems);
+      if(!items.some(i=>i.presentation===prod)) return false;
+    }
+    return true;
+  });
+
+  // Poblar selector de productos desde los datos filtrados
+  const prods=new Set();
+  allData.forEach(r=>parseJ(r.myitems).forEach(i=>i.presentation&&prods.add(i.presentation)));
+  const ps=document.getElementById('fProducto');
+  const cur=ps.value;
+  ps.innerHTML='<option value="">Todos</option>';
+  [...prods].sort().forEach(p=>ps.innerHTML+=`<option value="${p}"${p===cur?' selected':''}>${p}</option>`);
+
+  renderAll();
+}
+
+function aplicar(){ aplicarFiltros(); }
+function resetFiltros(){
+  ['fPromotor','fEstado','fZona','fComercio','fProducto','fLinea','fTipo'].forEach(id=>document.getElementById(id).value='');
+  aplicarFiltros();
+}
+
+function setLoading(on){
+  if(on){
+    document.getElementById('kpiStrip').innerHTML='<div class="ld"><span class="ld-dot"></span><span class="ld-dot"></span><span class="ld-dot"></span><span style="margin-left:8px;color:var(--ink3)">Cargando datos...</span></div>';
+  }
+}
+
+// ════════════════════════════════════════
+// UTILS
+// ════════════════════════════════════════
+function parseJ(v){if(Array.isArray(v))return v;try{return JSON.parse(v)||[];}catch{return[];}}
+function fmtD(s){return new Date(s).toLocaleDateString('es-ES',{day:'2-digit',month:'short',year:'2-digit'});}
+function fmtUSD(n){return '$'+Number(n).toFixed(2).replace('.',',');}
+const COLORS=['#4f46e5','#0891b2','#059669','#d97706','#dc2626','#7c3aed','#db2777','#0369a1','#15803d','#92400e'];
+const tc=()=>'#64748b', gc=()=>'rgba(0,0,0,.05)';
+
+function toUSD(p,m,f){
+  if(!p) return 0;
+  let s=String(p).replace(/[^0-9.,]/g,'').trim();
+  if(s.includes(',')&&s.includes('.')){const lc=s.lastIndexOf(','),ld=s.lastIndexOf('.');s=lc>ld?s.replace(/\./g,'').replace(',','.'):s.replace(/,/g,'');}
+  else if(s.includes(','))s=s.split(',')[1]?.length<=2?s.replace(',','.'):s.replace(/,/g,'');
+  const n=parseFloat(s)||0;
+  const mn=(m||'').toUpperCase();
+  const t=tasas.find(x=>new Date(x.fecha)<=new Date(f))||tasas[0]||{tasa_bs_usd:36.5,tasa_cop_usd:4200};
+  if(mn==='BS'||mn==='B$'||mn==='VES') return n/parseFloat(t.tasa_bs_usd||36.5);
+  if(mn==='COP'||mn==='PESOS') return n/parseFloat(t.tasa_cop_usd||4200);
+  return n;
+}
+
+function fmtProdTxt(item){
+  if(!item) return '—';
+  const name = item.presentation || item.producto || item.name || item.descripcion || '';
+  if(!name && !item.gramaje) return '—';
+  if(!item.gramaje) return name || '—';
+  const g = item.gramaje % 1 === 0 ? parseInt(item.gramaje) : item.gramaje;
+  const suffix = `${g}${item.unidad || ''}`;
+  if(name && name.includes(suffix)) return name;
+  return name ? `${name} — ${suffix}` : suffix;
+}
+
+function destroyChart(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
+function mkChart(id,type,data,opts={}){
+  destroyChart(id);
+  const canvas=document.getElementById(id);
+  if(!canvas)return;
+  // Guardar labels completos para tooltips
+  const fullLabels=[...(data.labels||[])];
+  const isDoughnut = type==='doughnut'||type==='pie';
+  const scalesOpt = isDoughnut ? undefined : {
+    x:{ ticks:{color:tc(),font:{size:10},maxRotation:50,autoSkip:false}, grid:{color:gc()} },
+    y:{ ticks:{color:tc(),font:{size:10}}, grid:{color:gc()} }
+  };
+  const options = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend:{display:false},
+      tooltip:{
+        callbacks:{
+          title: items => fullLabels[items[0].dataIndex] || items[0].label
+        }
+      }
+    }
+  };
+  if (!isDoughnut) options.scales = scalesOpt;
+  charts[id] = new Chart(canvas, {type, data, options});
+  return charts[id];
+}
+
+function groupByDay(data,key='created_at'){
+  const m={};
+  data.forEach(r=>{const d=new Date(r[key]).toLocaleDateString('es-ES',{day:'2-digit',month:'short'});m[d]=(m[d]||0)+1;});
+  return {labels:Object.keys(m),values:Object.values(m)};
+}
+
+function linearRegression(y){
+  const n=y.length; if(!n)return{slope:0,intercept:0};
+  const x=[...Array(n)].map((_,i)=>i);
+  const mx=x.reduce((a,b)=>a+b,0)/n, my=y.reduce((a,b)=>a+b,0)/n;
+  const num=x.reduce((s,xi,i)=>s+(xi-mx)*(y[i]-my),0);
+  const den=x.reduce((s,xi)=>s+(xi-mx)**2,0);
+  const slope=den?num/den:0;
+  return{slope,intercept:my-slope*mx};
+}
+
+// ════════════════════════════════════════
+// RENDER ALL
+// ════════════════════════════════════════
+function renderAll(){
+  renderKPIs();
+  renderGerencial();
+  renderPrecios();
+  renderAnaquel();
+  renderCaras();
+  renderStock();
+    renderSugerenciasStock();
+  renderPromotores();
+  renderEspacios();
+  renderProyeccion();
+  updateContext();
+}
+
+function updateContext(){
+  const desde=document.getElementById('fDesde').value;
+  const hasta=document.getElementById('fHasta').value;
+  document.getElementById('rp-context').textContent=`${ENOMBRE} · ${desde} → ${hasta} · ${filtData.length} visitas`;
+}
+
+// ── TABS ──
+function showTab(name,btn){
+  document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  btn.classList.add('active');
+  activeTab=name;
+  // Re-render charts del tab activo (por si eran invisibles)
+  setTimeout(()=>{
+    Object.values(charts).forEach(c=>{try{c.resize();}catch{}});
+  },50);
+}
+
+// ════════════════════════════════════════
+// GPS — calcular distancia haversine local
+// ════════════════════════════════════════
+function haversineDist(lat1,lon1,lat2,lon2){
+  const R=6371000;
+  const dL=((lat2-lat1)*Math.PI)/180;
+  const dO=((lon2-lon1)*Math.PI)/180;
+  const a=Math.sin(dL/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dO/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+// Mapa de clientes con coordenadas (cargado una vez)
+let clientesCoordMap = {};
+async function loadClientesCoords(){
+  try{
+    const {data}=await $db('web_clientes').select('id,latitude,longitude').eq('empresa_id',EID);
+    (data||[]).forEach(c=>{if(c.latitude&&c.longitude)clientesCoordMap[c.id]={lat:parseFloat(c.latitude),lon:parseFloat(c.longitude)};});
+  }catch(e){console.warn('coords:',e);}
+}
+
+// Determinar si una visita está confirmada por GPS
+function isConfirmado(r){
+  if(!r.latitude||!r.longitude) return false;
+  const cli=clientesCoordMap[r.cliente_id];
+  if(!cli) return false;
+  return haversineDist(parseFloat(r.latitude),parseFloat(r.longitude),cli.lat,cli.lon)<=150;
+}
+
+// ════════════════════════════════════════
+// KPIs
+// ════════════════════════════════════════
+function renderKPIs(){
+  const total=filtData.length;
+  const proms=new Set(filtData.map(r=>r.promoter_name).filter(Boolean)).size;
+  const coms=new Set(filtData.map(r=>r.trade).filter(Boolean)).size;
+  const conf=filtData.filter(r=>isConfirmado(r)).length;
+  const pctGPS=total?Math.round(conf/total*100):0;
+  let sumUSD=0,cntUSD=0;
+  filtData.forEach(r=>parseJ(r.myitems).forEach(i=>{if(i.price&&i.currency&&i.presentation!=='SIN STOCK'){sumUSD+=toUSD(i.price,i.currency,r.created_at);cntUSD++;}}));
+  const avgUSD=cntUSD?sumUSD/cntUSD:0;
+  const metros=filtData.reduce((s,r)=>s+(parseFloat(r.shelf_meters)||0),0);
+  let sinStock=0;
+  filtData.forEach(r=>parseJ(r.myitems).forEach(i=>{if(i.presentation==='SIN STOCK'||i.stock_shelf===0)sinStock++;}));
+
+  document.getElementById('kpiStrip').innerHTML=`
+    <div class="kpi" style="--k-c:var(--acc)"><div class="kpi-val">${total}</div><div class="kpi-lbl">Visitas totales</div></div>
+    <div class="kpi" style="--k-c:var(--grn)"><div class="kpi-val">${proms}</div><div class="kpi-lbl">Promotores activos</div></div>
+    <div class="kpi" style="--k-c:var(--cyn)"><div class="kpi-val">${coms}</div><div class="kpi-lbl">Comercios visitados</div></div>
+    <div class="kpi" style="--k-c:${pctGPS>=70?'var(--grn)':'var(--amb)'}"><div class="kpi-val">${pctGPS}%</div><div class="kpi-lbl">Confirmación GPS</div></div>
+    <div class="kpi" style="--k-c:var(--vio)"><div class="kpi-val">${fmtUSD(avgUSD)}</div><div class="kpi-lbl">Precio prom. USD</div></div>
+    <div class="kpi" style="--k-c:var(--amb)"><div class="kpi-val">${metros.toFixed(1)}m</div><div class="kpi-lbl">Metros anaquel</div></div>
+    <div class="kpi" style="--k-c:var(--red)"><div class="kpi-val">${sinStock}</div><div class="kpi-lbl">Quiebres stock</div></div>`;
+}
+
+// ════════════════════════════════════════
+// GERENCIAL
+// ════════════════════════════════════════
+function renderGerencial(){
+  const {labels:ld,values:vd}=groupByDay(filtData);
+  mkChart('c-ger-dias','bar',{labels:ld,datasets:[{data:vd,backgroundColor:'rgba(79,70,229,.7)',borderRadius:4,borderSkipped:false}]});
+
+  const byProm={};
+  filtData.forEach(r=>{const p=r.promoter_name||'Sin nombre';byProm[p]=(byProm[p]||0)+1;});
+  const topP=Object.entries(byProm).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  mkChart('c-ger-prom','bar',{labels:topP.map(([k])=>k),datasets:[{data:topP.map(([,v])=>v),backgroundColor:COLORS,borderRadius:4,borderSkipped:false}]},{plugins:{legend:{display:false}}});
+
+  const byEst={};
+  filtData.forEach(r=>{const e=r.state||'N/A';byEst[e]=(byEst[e]||0)+1;});
+  const estE=Object.entries(byEst).sort((a,b)=>b[1]-a[1]);
+  mkChart('c-ger-estado','doughnut',{labels:estE.map(([k])=>k),datasets:[{data:estE.map(([,v])=>v),backgroundColor:COLORS,borderWidth:0}]},{plugins:{legend:{display:true,position:'right',labels:{color:tc(),font:{size:10},boxWidth:10}}}});
+
+  // GPS por semana
+  const bySem={};
+  filtData.forEach(r=>{
+    const d=new Date(r.created_at);
+    const sem=`S${Math.ceil(d.getDate()/7)} ${d.toLocaleDateString('es-ES',{month:'short'})}`;
+    if(!bySem[sem])bySem[sem]={total:0,conf:0};
+    bySem[sem].total++;
+    if(isConfirmado(r))bySem[sem].conf++;
+  });
+  const semE=Object.entries(bySem);
+  mkChart('c-ger-gps','line',{labels:semE.map(([k])=>k),datasets:[{label:'GPS %',data:semE.map(([,v])=>v.total?Math.round(v.conf/v.total*100):0),borderColor:'#059669',backgroundColor:'rgba(5,150,105,.1)',tension:.4,pointRadius:4,fill:true}]},{plugins:{legend:{display:false}},yTick:{callback:v=>v+'%'}});
+
+  // Tabla comercios
+  const byT={};
+  filtData.forEach(r=>{if(!byT[r.trade])byT[r.trade]={v:0,c:0,estado:r.state};byT[r.trade].v++;if(isConfirmado(r))byT[r.trade].c++;});
+  const topT=Object.entries(byT).sort((a,b)=>b[1].v-a[1].v).slice(0,15);
+  document.querySelector('#t-ger-comercios tbody').innerHTML=topT.map(([t,x],i)=>`<tr><td><strong>${i+1}</strong></td><td>${t||'—'}</td><td><strong>${x.v}</strong></td><td>${x.v?Math.round(x.c/x.v*100):0}%</td><td><span class="badge badge-blu">${x.estado||'—'}</span></td></tr>`).join('');
+}
+
+// ════════════════════════════════════════
+// PRECIOS
+// ════════════════════════════════════════
+function renderPrecios(){
+  const prodUSD={}, compUSD={}, monedaCount={};
+  const tendUSD=[];
+  filtData.forEach(r=>{
+    parseJ(r.myitems).forEach(i=>{
+      if(!i.price||!i.currency||i.presentation==='SIN STOCK')return;
+      const u=toUSD(i.price,i.currency,r.created_at);
+      if(!prodUSD[i.presentation])prodUSD[i.presentation]=[];
+      prodUSD[i.presentation].push(u);
+      const mn=(i.currency||'').toUpperCase();
+      monedaCount[mn]=(monedaCount[mn]||0)+1;
+      tendUSD.push({date:r.created_at,usd:u});
+    });
+    parseJ(r.competitoritems).forEach(i=>{
+      if(!i.price||!i.currency||i.sin_stock)return;
+      const u=toUSD(i.price,i.currency,r.created_at);
+      if(!compUSD[i.presentation])compUSD[i.presentation]=[];
+      compUSD[i.presentation].push(u);
+    });
+  });
+
+  const avg=arr=>arr.length?arr.reduce((a,b)=>a+b,0)/arr.length:0;
+  const topProd=Object.entries(prodUSD).map(([k,v])=>({k,v:avg(v)})).sort((a,b)=>b.v-a.v).slice(0,10);
+
+  mkChart('c-pre-prod','bar',{labels:topProd.map(x=>x.k),datasets:[{data:topProd.map(x=>+x.v.toFixed(2)),backgroundColor:'rgba(79,70,229,.75)',borderRadius:4,borderSkipped:false}]},{yTick:{callback:v=>'$'+v.toFixed(1)}});
+
+  // Nuestros vs comp — mostrar aunque no haya nombres en común
+  const topNuestros=Object.entries(prodUSD).map(([k,v])=>({k,v:avg(v)})).sort((a,b)=>b.v-a.v).slice(0,8);
+  const topComp=Object.entries(compUSD).map(([k,v])=>({k,v:avg(v)})).sort((a,b)=>b.v-a.v).slice(0,8);
+  const allCompLabels=[...new Set([...topNuestros.map(x=>x.k),...topComp.map(x=>x.k)])].slice(0,12);
+  const nMap=Object.fromEntries(topNuestros.map(x=>[x.k,x.v]));
+  const cMap=Object.fromEntries(topComp.map(x=>[x.k,x.v]));
+  if(allCompLabels.length){
+    mkChart('c-pre-comp','bar',{labels:allCompLabels,datasets:[
+      {label:'Nuestro',data:allCompLabels.map(k=>nMap[k]!=null?+nMap[k].toFixed(2):null),backgroundColor:'rgba(79,70,229,.75)',borderRadius:4,borderSkipped:false},
+      {label:'Competencia',data:allCompLabels.map(k=>cMap[k]!=null?+cMap[k].toFixed(2):null),backgroundColor:'rgba(220,38,38,.65)',borderRadius:4,borderSkipped:false}
+    ]},{plugins:{legend:{display:true,labels:{color:tc(),font:{size:10},boxWidth:10}}}});
+  }
+
+  // Tendencia USD por día
+  const tdMap={};
+  tendUSD.sort((a,b)=>new Date(a.date)-new Date(b.date)).forEach(x=>{const d=fmtD(x.date);if(!tdMap[d])tdMap[d]=[];tdMap[d].push(x.usd);});
+  const tdE=Object.entries(tdMap);
+  mkChart('c-pre-tend','line',{labels:tdE.map(([k])=>k),datasets:[{data:tdE.map(([,v])=>+avg(v).toFixed(2)),borderColor:'#7c3aed',backgroundColor:'rgba(124,58,237,.08)',tension:.4,pointRadius:3,fill:true}]},{yTick:{callback:v=>'$'+v.toFixed(2)}});
+
+  // Moneda
+  const monE=Object.entries(monedaCount);
+  mkChart('c-pre-moneda','doughnut',{labels:monE.map(([k])=>k),datasets:[{data:monE.map(([,v])=>v),backgroundColor:COLORS,borderWidth:0}]},{plugins:{legend:{display:true,position:'bottom',labels:{color:tc(),font:{size:10},boxWidth:10}}}});
+
+  // Tabla
+  const rows=[];
+  filtData.forEach(r=>{
+    parseJ(r.myitems).forEach(mi=>{
+      if(!mi.price||!mi.currency||mi.presentation==='SIN STOCK')return;
+      const nUSD=toUSD(mi.price,mi.currency,r.created_at);
+      // buscar competidor vinculado en la misma visita
+      const cis=parseJ(r.competitoritems);
+      const ci=cis.find(x=>x.price&&x.currency&&!x.sin_stock);
+      const cUSD=ci?toUSD(ci.price,ci.currency,r.created_at):null;
+      const diff=cUSD?((nUSD-cUSD)/cUSD*100):null;
+      rows.push([fmtD(r.created_at),r.promoter_name||'—',r.trade||'—',fmtProdTxt(mi),`${mi.currency} ${mi.price}`,fmtUSD(nUSD),ci?.presentation||'—',cUSD?fmtUSD(cUSD):'—',diff!=null?(diff>0?`<span class="badge badge-red">+${diff.toFixed(1)}%</span>`:`<span class="badge badge-grn">${diff.toFixed(1)}%</span>`):'—']);
+    });
+  });
+  document.querySelector('#t-pre-detalle tbody').innerHTML=rows.slice(0,200).map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')||'<tr><td colspan="9" class="empty">Sin datos de precios</td></tr>';
+}
+
+// ════════════════════════════════════════
+// ANAQUEL
+// ════════════════════════════════════════
+function renderAnaquel(){
+  const byItem={}, byTrade={}, totN=[0], totC=[0];
+  filtData.forEach(r=>{
+    const sm=parseFloat(r.shelf_meters)||0;
+    if(sm>0){if(!byTrade[r.trade])byTrade[r.trade]={n:0,c:0};byTrade[r.trade].n+=sm;totN[0]+=sm;}
+    parseJ(r.competitoritems).forEach(i=>{
+      const cs=parseFloat(i.shelf_meters)||0;
+      if(cs>0){if(!byTrade[r.trade])byTrade[r.trade]={n:0,c:0};byTrade[r.trade].c+=cs;totC[0]+=cs;}
+    });
+    parseJ(r.myitems).forEach(i=>{
+      if(i.presentation&&i.presentation!=='SIN STOCK'&&sm>0){
+        if(!byItem[i.presentation])byItem[i.presentation]={sum:0,cnt:0};
+        const itemCnt=Math.max(parseJ(r.myitems).filter(x=>x.presentation&&x.presentation!=='SIN STOCK').length,1);
+        byItem[i.presentation].sum+=sm/itemCnt;
+        byItem[i.presentation].cnt++;
+      }
+    });
+  });
+
+  // Promedio por producto, no acumulado
+  const topI=Object.entries(byItem).map(([k,v])=>([k,v.sum/v.cnt])).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  mkChart('c-an-prod','bar',{labels:topI.map(([k])=>k),datasets:[{data:topI.map(([,v])=>+v.toFixed(2)),backgroundColor:'rgba(5,150,105,.75)',borderRadius:4,borderSkipped:false}]},{yTick:{callback:v=>v+'m'}});
+
+  mkChart('c-an-sos','doughnut',{labels:['Metros propios','Metros competencia'],datasets:[{data:[+totN[0].toFixed(2),+totC[0].toFixed(2)],backgroundColor:['rgba(79,70,229,.8)','rgba(220,38,38,.7)'],borderWidth:0}]},{plugins:{legend:{display:true,position:'bottom',labels:{color:tc(),font:{size:11},boxWidth:10}}}});
+
+  const topT=Object.entries(byTrade).sort((a,b)=>b[1].n-a[1].n).slice(0,15);
+  mkChart('c-an-trade','bar',{labels:topT.map(([k])=>k),datasets:[
+    {label:'Propios',data:topT.map(([,v])=>+v.n.toFixed(2)),backgroundColor:'rgba(79,70,229,.75)',borderRadius:4,borderSkipped:false},
+    {label:'Competencia',data:topT.map(([,v])=>+v.c.toFixed(2)),backgroundColor:'rgba(220,38,38,.6)',borderRadius:4,borderSkipped:false}
+  ]},{plugins:{legend:{display:true,labels:{color:tc(),font:{size:10},boxWidth:10}}}});
+}
+
+// ════════════════════════════════════════
+// CARAS
+// ════════════════════════════════════════
+function renderCaras(){
+  const byDay={}, byProm={};
+  let totBef=0,totAft=0,totCBef=0,totCompFaces=0;
+  filtData.forEach(r=>{
+    const b=parseFloat(r.our_faces_before_counted)||parseFloat(r.our_faces_before_manual)||0;
+    const a=parseFloat(r.our_faces_after)||0;
+    const tb=parseFloat(r.total_faces_before)||0;
+    totBef+=b;totAft+=a;totCBef+=tb;
+    parseJ(r.competitoritems).forEach(i=>{if(!i.sin_stock)totCompFaces+=parseFloat(i.faces)||parseFloat(i.faces_after)||parseFloat(i.faces_before)||0;});
+    const d=fmtD(r.created_at);
+    if(!byDay[d])byDay[d]={b:[],a:[]};byDay[d].b.push(b);byDay[d].a.push(a);
+    const p=r.promoter_name||'Sin nombre';
+    if(!byProm[p])byProm[p]={b:0,a:0,n:0};byProm[p].b+=b;byProm[p].a+=a;byProm[p].n++;
+  });
+
+  const avg=arr=>arr.length?arr.reduce((s,v)=>s+v,0)/arr.length:0;
+  const dayE=Object.entries(byDay);
+  mkChart('c-car-tend','line',{labels:dayE.map(([k])=>k),datasets:[
+    {label:'Antes',data:dayE.map(([,v])=>+avg(v.b).toFixed(1)),borderColor:'#d97706',backgroundColor:'rgba(217,119,6,.1)',tension:.4,pointRadius:3,fill:true},
+    {label:'Después',data:dayE.map(([,v])=>+avg(v.a).toFixed(1)),borderColor:'#059669',backgroundColor:'rgba(5,150,105,.1)',tension:.4,pointRadius:3,fill:true}
+  ]},{plugins:{legend:{display:true,labels:{color:tc(),font:{size:10},boxWidth:10}}}});
+
+  const promE=Object.entries(byProm).sort((a,b)=>(b[1].a-b[1].b)-(a[1].a-a[1].b)).slice(0,10);
+  mkChart('c-car-prom','bar',{labels:promE.map(([k])=>k),datasets:[{data:promE.map(([,v])=>+(v.a-v.b).toFixed(1)),backgroundColor:promE.map(([,v])=>v.a>=v.b?'rgba(5,150,105,.75)':'rgba(220,38,38,.65)'),borderRadius:4,borderSkipped:false}]});
+
+  const totNuestras=totAft;const totComp=totCompFaces>0?totCompFaces:Math.max(totCBef-totBef,0);
+  mkChart('c-car-sos','bar',{labels:['Total acumulado'],datasets:[
+    {label:'Caras propias',data:[totNuestras],backgroundColor:'rgba(79,70,229,.8)',borderRadius:4,borderSkipped:false},
+    {label:'Caras competencia (ref)',data:[totComp],backgroundColor:'rgba(220,38,38,.6)',borderRadius:4,borderSkipped:false}
+  ]},{indexAxis:'y',plugins:{legend:{display:true,labels:{color:tc(),font:{size:10},boxWidth:10}}}});
+}
+
+// ════════════════════════════════════════
+// STOCK
+// ════════════════════════════════════════
+function renderStock(){
+  const byProd={},byTrade={},rows=[];
+  filtData.forEach(r=>{
+    parseJ(r.myitems).forEach(i=>{
+      if(i.presentation==='SIN STOCK'||i.stock_shelf===0||i.stock_shelf===null){
+        byProd[i.presentation||'N/A']=(byProd[i.presentation||'N/A']||0)+1;
+        byTrade[r.trade||'N/A']=(byTrade[r.trade||'N/A']||0)+1;
+        rows.push([fmtD(r.created_at),r.promoter_name||'—',r.trade||'—',fmtProdTxt(i)||'—',i.stock_shelf??'SIN STOCK',i.stock_warehouse??'SIN STOCK']);
+      }
+    });
+  });
+
+  const topP=Object.entries(byProd).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  mkChart('c-stk-prod','bar',{labels:topP.map(([k])=>k),datasets:[{data:topP.map(([,v])=>v),backgroundColor:'rgba(220,38,38,.7)',borderRadius:4,borderSkipped:false}]});
+
+  const topT=Object.entries(byTrade).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  mkChart('c-stk-trade','bar',{labels:topT.map(([k])=>k),datasets:[{data:topT.map(([,v])=>v),backgroundColor:'rgba(217,119,6,.75)',borderRadius:4,borderSkipped:false}]});
+
+  document.querySelector('#t-stk tbody').innerHTML=rows.slice(0,200).map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')||'<tr><td colspan="6" class="empty">Sin quiebres registrados</td></tr>';
+}
+
+// ════════════════════════════════════════
+// PROMOTORES
+// ════════════════════════════════════════
+function renderPromotores(){
+  const stats={};
+  allProms.forEach(p=>{stats[p.promoter_name]={name:p.promoter_name,dias:p.dias_trabajo||5,v:0,conf:0,metros:0,carBef:0,carAft:0,esp:0,completos:0};});
+  filtData.forEach(r=>{
+    const p=r.promoter_name; if(!p)return;
+    if(!stats[p])stats[p]={name:p,dias:5,v:0,conf:0,metros:0,carBef:0,carAft:0,esp:0,completos:0};
+    stats[p].v++;
+    if(isConfirmado(r))stats[p].conf++;
+    stats[p].metros+=parseFloat(r.shelf_meters)||0;
+    stats[p].carBef+=parseFloat(r.our_faces_before_counted)||parseFloat(r.our_faces_before_manual)||0;
+    stats[p].carAft+=parseFloat(r.our_faces_after)||0;
+    // Espacios
+    const esp=r.espacios_adicionales;
+    let espArr=[];try{espArr=Array.isArray(esp)?esp:(esp?JSON.parse(esp):[]);}catch{}
+    stats[p].esp+=espArr.filter(e=>e.activo!==false&&e.tipo).length;
+    // Completos: tiene precio, GPS y fotos
+    const items=parseJ(r.myitems);
+    const tienePrecio=items.some(i=>i.price&&i.currency&&i.presentation!=='SIN STOCK');
+    const tieneGPS=r.latitude&&r.longitude;
+    if(tienePrecio&&tieneGPS)stats[p].completos++;
+  });
+
+  const list=Object.values(stats).filter(x=>x.v>0).sort((a,b)=>{
+    const meta_a=a.dias*8,meta_b=b.dias*8;
+    const pct_a=meta_a?a.conf/meta_a:0,pct_b=meta_b?b.conf/meta_b:0;
+    return pct_b-pct_a;
+  });
+
+  // Ranking cards
+  const rankC=document.getElementById('ranking-cards');
+  rankC.innerHTML=list.slice(0,9).map((p,i)=>{
+    const meta=p.dias*8, pct=meta?Math.min(100,Math.round(p.conf/meta*100)):0;
+    const gpsPct=p.v?Math.round(p.conf/p.v*100):0;
+    const compPct=p.v?Math.round(p.completos/p.v*100):0;
+    const rankCls=i===0?'rank-1':i===1?'rank-2':i===2?'rank-3':'rank-n';
+    const medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':`#${i+1}`;
+    return `<div class="prom-card">
+      <div class="prom-rank ${rankCls}">${medal}</div>
+      <div class="prom-info">
+        <div class="prom-name">${p.name}</div>
+        <div class="prom-sub">${p.v} visitas · Meta: ${meta}</div>
+      </div>
+      <div class="prom-bars">
+        <div class="bar-row"><span class="bar-lbl">Cumpl.</span><div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${pct>=80?'var(--grn)':pct>=50?'var(--amb)':'var(--red)'}"></div></div><span class="bar-val">${pct}%</span></div>
+        <div class="bar-row"><span class="bar-lbl">GPS</span><div class="bar-track"><div class="bar-fill" style="width:${gpsPct}%;background:var(--cyn)"></div></div><span class="bar-val">${gpsPct}%</span></div>
+        <div class="bar-row"><span class="bar-lbl">Completos</span><div class="bar-track"><div class="bar-fill" style="width:${compPct}%;background:var(--vio)"></div></div><span class="bar-val">${compPct}%</span></div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Charts promotores
+  const top8=list.slice(0,8);
+  mkChart('c-prom-vis','bar',{labels:top8.map(p=>p.name),datasets:[
+    {label:'Visitas',data:top8.map(p=>p.v),backgroundColor:'rgba(79,70,229,.75)',borderRadius:4,borderSkipped:false},
+    {label:'Meta',data:top8.map(p=>p.dias*8),backgroundColor:'rgba(100,116,139,.3)',borderRadius:4,borderSkipped:false}
+  ]},{plugins:{legend:{display:true,labels:{color:tc(),font:{size:10},boxWidth:10}}}});
+
+  mkChart('c-prom-gps','bar',{labels:top8.map(p=>p.name),datasets:[{data:top8.map(p=>p.v?Math.round(p.conf/p.v*100):0),backgroundColor:top8.map(p=>p.v&&p.conf/p.v>=.7?'rgba(5,150,105,.75)':'rgba(217,119,6,.75)'),borderRadius:4,borderSkipped:false}]},{yTick:{callback:v=>v+'%'}});
+
+  mkChart('c-prom-metros','bar',{labels:top8.map(p=>p.name),datasets:[{data:top8.map(p=>+p.metros.toFixed(1)),backgroundColor:'rgba(8,145,178,.7)',borderRadius:4,borderSkipped:false}]},{yTick:{callback:v=>v+'m'}});
+
+  mkChart('c-prom-caras','bar',{labels:top8.map(p=>p.name),datasets:[{data:top8.map(p=>+(p.carAft-p.carBef).toFixed(0)),backgroundColor:top8.map(p=>(p.carAft-p.carBef)>=0?'rgba(5,150,105,.75)':'rgba(220,38,38,.65)'),borderRadius:4,borderSkipped:false}]});
+
+  // Tabla completa
+  document.querySelector('#t-prom tbody').innerHTML=list.map((p,i)=>{
+    const meta=p.dias*8,pct=meta?Math.min(100,Math.round(p.conf/meta*100)):0;
+    const gps=p.v?Math.round(p.conf/p.v*100):0;
+    const comp=p.v?Math.round(p.completos/p.v*100):0;
+    const b=pct>=80?'badge-grn':pct>=50?'badge-amb':'badge-red';
+    return `<tr><td><strong>${i+1}. ${p.name}</strong></td><td>${p.v}</td><td>${meta}</td><td><span class="badge ${b}">${pct}%</span></td><td>${gps}%</td><td>${p.metros.toFixed(1)}m</td><td>${(p.carAft-p.carBef).toFixed(0)}</td><td>${p.esp}</td><td>${comp}%</td></tr>`;
+  }).join('')||'<tr><td colspan="9" class="empty">Sin datos</td></tr>';
+}
+
+// ════════════════════════════════════════
+// ESPACIOS
+// ════════════════════════════════════════
+function renderEspacios(){
+  const tipos={Torre:0,Cabezal:0,Paleta:0,'Exhibición':0};
+  const byTrade={},byProm={};
+  filtData.forEach(r=>{
+    let esp=[];try{esp=Array.isArray(r.espacios_adicionales)?r.espacios_adicionales:(r.espacios_adicionales?JSON.parse(r.espacios_adicionales):[]);}catch{}
+    esp.filter(e=>e.activo!==false&&e.tipo).forEach(e=>{
+      if(tipos[e.tipo]!==undefined)tipos[e.tipo]++;
+      byTrade[r.trade||'N/A']=(byTrade[r.trade||'N/A']||0)+1;
+      if(!byProm[r.promoter_name||'N/A'])byProm[r.promoter_name||'N/A']={Torre:0,Cabezal:0,Paleta:0,'Exhibición':0};
+      if(byProm[r.promoter_name||'N/A'][e.tipo]!==undefined)byProm[r.promoter_name||'N/A'][e.tipo]++;
+    });
+  });
+
+  mkChart('c-esp-tipo','doughnut',{labels:Object.keys(tipos),datasets:[{data:Object.values(tipos),backgroundColor:['#8b5cf6','#06b6d4','#f59e0b','#10b981'],borderWidth:0}]},{plugins:{legend:{display:true,position:'bottom',labels:{color:tc(),font:{size:10},boxWidth:10}}}});
+
+  const topT=Object.entries(byTrade).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  mkChart('c-esp-trade','bar',{labels:topT.map(([k])=>k),datasets:[{data:topT.map(([,v])=>v),backgroundColor:'rgba(139,92,246,.75)',borderRadius:4,borderSkipped:false}]});
+
+  const promE=Object.entries(byProm).slice(0,10);
+  const cols=['#8b5cf6','#06b6d4','#f59e0b','#10b981'];
+  mkChart('c-esp-prom','bar',{labels:promE.map(([k])=>k),datasets:['Torre','Cabezal','Paleta','Exhibición'].map((t,i)=>({label:t,data:promE.map(([,v])=>v[t]||0),backgroundColor:cols[i],borderRadius:3,borderSkipped:false}))},{plugins:{legend:{display:true,labels:{color:tc(),font:{size:10},boxWidth:10}}}});
+  renderEspaciosTabla();
+}
+
+function renderEspaciosTabla(){
+  const grupos={};
+  filtData.forEach(r=>{
+    let esp=[];try{esp=Array.isArray(r.espacios_adicionales)?r.espacios_adicionales:(r.espacios_adicionales?JSON.parse(r.espacios_adicionales):[]);}catch{}
+    esp.filter(e=>e.activo!==false&&e.tipo).forEach(e=>{
+      const k=(r.trade||'—')+'|||'+e.tipo;
+      if(!grupos[k])grupos[k]={comercio:r.trade||'—',tipo:e.tipo,items:[]};
+      grupos[k].items.push({producto:e.producto||'—',cantidad:e.capacidad??e.unidades??null});
+    });
+  });
+  const tbody=document.querySelector('#t-esp-grupos tbody');
+  const entries=Object.entries(grupos).sort((a,b)=>a[1].comercio.localeCompare(b[1].comercio));
+  if(!entries.length){tbody.innerHTML='<tr><td colspan="5" class="empty">Sin espacios en el período</td></tr>';return;}
+  let html='';
+  entries.forEach(([k,g],idx)=>{
+    const totalCap=g.items.reduce((s,i)=>s+(parseFloat(i.cantidad)||0),0);
+    const prodDesc=[...new Set(g.items.map(i=>i.producto))].join(', ');
+    html+=`<tr class="esp-gr" style="cursor:pointer" onclick="toggleEspDetalle('esp-d-${idx}',this)">
+      <td><strong>${g.comercio}</strong></td><td>${g.tipo}</td>
+      <td style="text-align:center;font-weight:700">${totalCap||'—'}</td>
+      <td style="color:var(--ink3);font-size:.75rem;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${prodDesc}">${prodDesc}</td>
+      <td style="text-align:center;color:var(--acc);font-size:.8rem">▶</td></tr>
+    <tr id="esp-d-${idx}" style="display:none;background:rgba(79,70,229,.03)">
+      <td colspan="5" style="padding:0 12px 12px 32px">
+        <table style="width:100%;font-size:.76rem;border-collapse:collapse;margin-top:6px">
+          <thead><tr>
+            <th style="text-align:left;padding:5px 10px;color:var(--ink3);border-bottom:1px solid var(--brd);font-size:.65rem;text-transform:uppercase">Producto</th>
+            <th style="text-align:right;padding:5px 10px;color:var(--ink3);border-bottom:1px solid var(--brd);font-size:.65rem;text-transform:uppercase">Cantidad</th>
+          </tr></thead>
+          <tbody>${g.items.map(i=>`<tr><td style="padding:4px 10px;border-bottom:1px solid var(--brd)">${i.producto}</td><td style="padding:4px 10px;text-align:right;border-bottom:1px solid var(--brd);font-weight:700;color:var(--acc)">${i.cantidad??'—'}</td></tr>`).join('')}</tbody>
+        </table>
+      </td>
+    </tr>`;
+  });
+  tbody.innerHTML=html;
+}
+
+function toggleEspDetalle(id,row){
+  const det=document.getElementById(id); if(!det)return;
+  const open=det.style.display!=='none';
+  det.style.display=open?'none':'table-row';
+  row.querySelector('td:last-child').textContent=open?'▶':'▼';
+}
+
+// ════════════════════════════════════════
+// SUGERENCIAS STOCK BAJO
+// ════════════════════════════════════════
+function renderSugerenciasStock(){
+  const container = document.getElementById('sug-stock-bajo');
+  if(!container) return;
+
+  // Acumular por comercio: cuántas veces tuvo stock bajo/sin stock
+  const porComercio = {};
+  filtData.forEach(r => {
+    parseJ(r.myitems).forEach(i => {
+      const sinStock = i.presentation==='SIN STOCK' || i.stock_shelf===0 || i.stock_shelf===null;
+      if(sinStock) {
+        const k = r.trade || 'Sin nombre';
+        if(!porComercio[k]) porComercio[k] = {n:0, prods:{}};
+        porComercio[k].n++;
+        const prod = i.presentation||'desconocido';
+        porComercio[k].prods[prod] = (porComercio[k].prods[prod]||0)+1;
+      }
+    });
+  });
+
+  const sorted = Object.entries(porComercio).sort((a,b)=>b[1].n-a[1].n).slice(0,8);
+
+  if(!sorted.length){
+    container.innerHTML='<div style="color:var(--ink3);font-size:.82rem;text-align:center;padding:16px">Sin registros de stock bajo en el período</div>';
+    return;
+  }
+
+  container.innerHTML = sorted.map(([trade, data], i) => {
+    const topProd = Object.entries(data.prods).sort((a,b)=>b[1]-a[1])[0];
+    const pct = filtData.filter(r=>r.trade===trade).length;
+    const freq = pct ? Math.round(data.n/pct*100) : 0;
+    const color = freq>=50 ? 'var(--red)' : freq>=25 ? 'var(--amb)' : 'var(--ink3)';
+    return `<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--brd)">
+      <div style="width:24px;height:24px;border-radius:50%;background:${color};color:#fff;display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700;flex-shrink:0">${i+1}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:.82rem;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${trade}">${trade}</div>
+        <div style="font-size:.7rem;color:var(--ink3);margin-top:1px">${data.n} reportes · producto más afectado: <strong style="color:var(--ink2)">${topProd?topProd[0]:'—'}</strong></div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-size:.9rem;font-weight:700;color:${color}">${freq}%</div>
+        <div style="font-size:.63rem;color:var(--ink3)">de sus visitas</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ════════════════════════════════════════
+// PROYECCIÓN
+// ════════════════════════════════════════
+function renderProyeccion(){
+  // Proyección: datos en orden ascendente (más antiguo → más nuevo → futuro)
+  const {labels:ldDesc,values:vdDesc}=groupByDay(filtData);
+  const ld=[...ldDesc].reverse();
+  const vd=[...vdDesc].reverse();
+
+  const reg=linearRegression(vd);
+  const proj=[...Array(30)].map((_,i)=>{
+    const d=new Date(); d.setDate(d.getDate()+i+1);
+    return{l:d.toLocaleDateString('es-ES',{day:'2-digit',month:'short'}),v:Math.max(0,+(reg.intercept+reg.slope*(vd.length+i)).toFixed(1))};
+  });
+
+  mkChart('c-proy-vis','line',{labels:[...ld,...proj.map(x=>x.l)],datasets:[
+    {label:'Histórico',data:[...vd,...Array(30).fill(null)],borderColor:'#4f46e5',backgroundColor:'rgba(79,70,229,.08)',tension:.4,pointRadius:2,fill:true},
+    {label:'Proyección',data:[...Array(ld.length).fill(null),...proj.map(x=>x.v)],borderColor:'#06b6d4',backgroundColor:'rgba(6,182,212,.06)',tension:.4,borderDash:[6,4],pointRadius:2,fill:true}
+  ]},{plugins:{legend:{display:true,labels:{color:tc(),font:{size:10},boxWidth:10}}}});
+
+  // Precio tendencia
+  const priceByDay={};
+  filtData.forEach(r=>{
+    const d=fmtD(r.created_at);
+    if(!priceByDay[d])priceByDay[d]=[];
+    parseJ(r.myitems).forEach(i=>{if(i.price&&i.currency&&i.presentation!=='SIN STOCK')priceByDay[d].push(toUSD(i.price,i.currency,r.created_at));});
+  });
+  const pE=Object.entries(priceByDay).sort((a,b)=>new Date(a[0])-new Date(b[0]));
+  const avg=arr=>arr.length?arr.reduce((a,b)=>a+b,0)/arr.length:0;
+  const pVals=pE.map(([,v])=>avg(v));
+  const pReg=linearRegression(pVals);
+  const pProj=[...Array(14)].map((_,i)=>{const d=new Date();d.setDate(d.getDate()+i+1);return{l:fmtD(d.toISOString()),v:Math.max(0,+(pReg.intercept+pReg.slope*(pVals.length+i)).toFixed(2))};});
+  mkChart('c-proy-precio','line',{labels:[...pE.map(([k])=>k),...pProj.map(x=>x.l)],datasets:[
+    {label:'Histórico',data:[...pVals.map(v=>+v.toFixed(2)),...Array(14).fill(null)],borderColor:'#7c3aed',tension:.4,pointRadius:2},
+    {label:'Proyección',data:[...Array(pVals.length).fill(null),...pProj.map(x=>x.v)],borderColor:'#c4b5fd',borderDash:[5,4],tension:.4,pointRadius:2}
+  ]},{plugins:{legend:{display:true,labels:{color:tc(),font:{size:10},boxWidth:10}}},yTick:{callback:v=>'$'+v.toFixed(2)}});
+
+  // Metros tendencia
+  const metByDay={};
+  filtData.forEach(r=>{const d=fmtD(r.created_at);if(!metByDay[d])metByDay[d]=[];if(r.shelf_meters)metByDay[d].push(parseFloat(r.shelf_meters));});
+  const mE=Object.entries(metByDay);
+  const mVals=mE.map(([,v])=>avg(v));
+  const mReg=linearRegression(mVals);
+  const mProj=[...Array(14)].map((_,i)=>{const d=new Date();d.setDate(d.getDate()+i+1);return{l:fmtD(d.toISOString()),v:Math.max(0,+(mReg.intercept+mReg.slope*(mVals.length+i)).toFixed(2))};});
+  mkChart('c-proy-metros','line',{labels:[...mE.map(([k])=>k),...mProj.map(x=>x.l)],datasets:[
+    {label:'Histórico',data:[...mVals.map(v=>+v.toFixed(2)),...Array(14).fill(null)],borderColor:'#059669',tension:.4,pointRadius:2},
+    {label:'Proyección',data:[...Array(mVals.length).fill(null),...mProj.map(x=>x.v)],borderColor:'#6ee7b7',borderDash:[5,4],tension:.4,pointRadius:2}
+  ]},{plugins:{legend:{display:true,labels:{color:tc(),font:{size:10},boxWidth:10}}},yTick:{callback:v=>v+'m'}});
+
+  // Predicciones y sugerencias
+  const total=filtData.length;
+  const conf=filtData.filter(r=>isConfirmado(r)).length;
+  const gpsPct=total?Math.round(conf/total*100):0;
+  const visProj30=Math.max(0,Math.round(reg.intercept+reg.slope*(vd.length+30)));
+  const priceTrend=pReg.slope>0?'al alza':'a la baja';
+  const metroTrend=mReg.slope>0?'creciendo':'decreciendo';
+
+  const sinStockMap={};
+  filtData.forEach(r=>parseJ(r.myitems).forEach(i=>{if(i.presentation==='SIN STOCK'||i.stock_shelf===0)sinStockMap[i.presentation||'N/A']=(sinStockMap[i.presentation||'N/A']||0)+1;}));
+  const topSS=Object.entries(sinStockMap).sort((a,b)=>b[1]-a[1]).slice(0,3);
+
+  document.getElementById('pred-container').innerHTML=`
+    <div class="pred-card">
+      <div class="pred-title">📊 Análisis predictivo del período</div>
+      <div class="pred-text">
+        Con base en los <strong>${total}</strong> registros del período, la tendencia de visitas es
+        <strong>${reg.slope>0?'positiva (creciendo)':'negativa (decreciendo)'}</strong>
+        con un promedio de <strong>${(vd.reduce((a,b)=>a+b,0)/Math.max(vd.length,1)).toFixed(1)}</strong> visitas por día.<br>
+        En 30 días se proyectan aproximadamente <strong>${visProj30}</strong> visitas diarias.<br>
+        Los precios están <strong>${priceTrend}</strong> y los metros de anaquel <strong>${metroTrend}</strong>.
+        La confirmación GPS actual es del <strong>${gpsPct}%</strong> — ${gpsPct>=80?'excelente nivel de control':'hay oportunidad de mejora en verificación de campo'}.
+      </div>
+    </div>
+    <div class="sug-card" style="--k-c:#059669">
+      <div class="sug-title">💡 Sugerencia — Control de stock</div>
+      <div class="sug-text">${topSS.length?`Los productos con más quiebres son: <strong>${topSS.map(([p,c])=>`${p} (${c} veces)`).join(', ')}</strong>. Prioriza el abastecimiento de estos productos antes de las rutas.`:'No se detectaron quiebres significativos en el período. Mantén el control preventivo.'}</div>
+    </div>
+    <div class="sug-card" style="--k-c:#7c3aed">
+      <div class="sug-title">💡 Sugerencia — Anaquel y espacios</div>
+      <div class="sug-text">Los metros de anaquel están ${metroTrend}. ${mReg.slope<0?'Refuerza la estrategia de exhibición — los promotores deben negociar más espacio en los puntos de venta de menor rendimiento.':'El equipo está ganando espacio de anaquel. Consolida los comercios con mayor SOS y replica la estrategia en los de menor rendimiento.'}</div>
+    </div>
+    <div class="sug-card" style="--k-c:#d97706">
+      <div class="sug-title">💡 Sugerencia — Precios y competitividad</div>
+      <div class="sug-text">Los precios están ${priceTrend}. ${priceTrend==='al alza'?'Verifica que la competencia no esté ajustando precios a la baja — una diferencia sostenida puede afectar la preferencia del consumidor.':'Los precios están bajando. Evalúa si esto responde a una estrategia comercial o a registros inconsistentes en campo.'}</div>
+    </div>
+    <div class="sug-card" style="--k-c:var(--acc)">
+      <div class="sug-title">💡 Sugerencia — Equipo de promotores</div>
+      <div class="sug-text">El GPS al ${gpsPct}% ${gpsPct<70?'indica que más del 30% de las visitas no se verifican en coordenadas. Implementa un proceso de validación previo a cerrar la ruta.':'es un buen indicador de presencia real en campo. Mantén la disciplina de captura de GPS como estándar de calidad.'}. Premia a los promotores con más espacios adicionales capturados para incentivar la actividad en punto de venta.</div>
+    </div>`;
+}
+
+// ════════════════════════════════════════
+// EXPORT
+// ════════════════════════════════════════
+function openExpModal(mode){expMode=mode;document.getElementById('expModalTitle').textContent=mode==='pdf'?'Opciones de exportación PDF':'Opciones de exportación Excel';document.getElementById('expConfirmBtn').style.background=mode==='pdf'?'#dc2626':'#059669';document.getElementById('expOverlay').classList.add('open');}
+function closeExpModal(){document.getElementById('expOverlay').classList.remove('open');}
+document.getElementById('expOverlay').addEventListener('click',e=>{if(e.target===e.currentTarget)closeExpModal();});
+
+async function confirmarExport(){
+  closeExpModal();
+  const todosLos=document.getElementById('opt-todos-tabs').checked;
+  const conGraf=document.getElementById('opt-graficos').checked;
+  if(expMode==='pdf') await exportPDF(todosLos,conGraf);
+  else exportXLS(todosLos);
+}
+
+function dlTabPDF(tab){ expMode='pdf'; exportPDF(false,true,tab); }
+function dlTabXLS(tab){ exportXLS(false,tab); }
+
+async function exportPDF(todos=false,conGraf=true,specificTab=null){
+  const spinEl=document.getElementById('spin-pdf');
+  spinEl.style.display='inline-block';
+  try{
+    const {jsPDF}=window.jspdf;
+    const pdf=new jsPDF('p','mm','a4');
+    const W=210,H=297;
+
+    const tabs=todos?['gerencial','precios','anaquel','caras','stock','promotores','espacios','proyeccion']:[specificTab||activeTab];
+    const tabNames={gerencial:'Resumen Ejecutivo',precios:'Análisis de Precios',anaquel:'Metros de Anaquel',caras:'Caras / SOS',stock:'Control de Stock',promotores:'Ranking Promotores',espacios:'Espacios Adicionales',proyeccion:'Proyecciones'};
+
+    for(let ti=0;ti<tabs.length;ti++){
+      if(ti>0) pdf.addPage();
+      const tab=tabs[ti];
+
+      // Header
+      pdf.setFillColor(79,70,229);
+      pdf.rect(0,0,210,18,'F');
+      pdf.setTextColor(255,255,255);
+      pdf.setFontSize(13);pdf.setFont('helvetica','bold');
+      pdf.text(`CAPTA — ${tabNames[tab]}`,14,12);
+      pdf.setFontSize(8);pdf.setFont('helvetica','normal');
+      const desde=document.getElementById('fDesde').value;
+      const hasta=document.getElementById('fHasta').value;
+      pdf.text(`${ENOMBRE} · ${desde} → ${hasta} · ${filtData.length} registros · ${new Date().toLocaleString('es-ES')}`,14,17.5);
+      pdf.setTextColor(0,0,0);
+
+      let y=24;
+
+      if(conGraf){
+        // Capturar el tab
+        const tabEl=document.getElementById('tab-'+tab);
+        const wasActive=tabEl.classList.contains('active');
+        if(!wasActive){tabEl.style.display='block';}
+        await new Promise(r=>setTimeout(r,200));
+        const snap=await html2canvas(tabEl,{scale:1.2,useCORS:true,logging:false,backgroundColor:'#ffffff',ignoreElements:el=>el.classList?.contains('export-btns')||el.classList?.contains('section-hdr')&&el.querySelector('.export-btns')});
+        if(!wasActive){tabEl.style.display='none';}
+        const iW=W-28, iH=(snap.height*iW)/snap.width;
+        let imgY=y;
+        while(imgY<y+iH){
+          if(imgY>y) pdf.addPage();
+          pdf.addImage(snap.toDataURL('image/jpeg',0.85),'JPEG',14,imgY===y?y:-0,(W-28),iH);
+          imgY+=H;
+        }
+      }
+
+      // Footer
+      const pages=pdf.getNumberOfPages();
+      for(let i=1;i<=pages;i++){
+        pdf.setPage(i);
+        pdf.setFontSize(7);pdf.setTextColor(150,150,150);
+        pdf.text('© CAPTA C.A. — archyss-dev',14,293);
+        pdf.text(`Pág. ${i}/${pages}`,196,293,{align:'right'});
+      }
+    }
+    pdf.save(`CAPTA_${tabNames[specificTab||activeTab]}_${new Date().toISOString().split('T')[0]}.pdf`);
+  }catch(e){console.error(e);}
+  finally{spinEl.style.display='none';}
+}
+
+function exportXLS(todos=false,specificTab=null){
+  const spinEl=document.getElementById('spin-xl');
+  spinEl.style.display='inline-block';
+  try{
+    const wb=XLSX.utils.book_new();
+    const desde=document.getElementById('fDesde').value;
+    const hasta=document.getElementById('fHasta').value;
+
+    const tabsToExport=todos?['gerencial','precios','anaquel','caras','stock','promotores','espacios']:[(specificTab||activeTab)];
+    const dataFns={
+      gerencial:()=>filtData.map(r=>({'Fecha':fmtD(r.created_at),'Promotor':r.promoter_name||'','Comercio':r.trade||'','Estado':r.state||'','Zona':r.zone||'','GPS':r.verified||'','Metros':r.shelf_meters||0,'Caras Antes':r.our_faces_before_counted||0,'Caras Después':r.our_faces_after||0,'Mayorista':r.p_mayorista||'No'})),
+      precios:()=>{const rows=[];filtData.forEach(r=>{parseJ(r.myitems).forEach(i=>{if(i.price&&i.currency)rows.push({'Fecha':fmtD(r.created_at),'Promotor':r.promoter_name||'','Comercio':r.trade||'','Tipo':'Propio','Producto':i.presentation||'','Precio Original':i.price||'','Moneda':i.currency||'','USD':+toUSD(i.price,i.currency,r.created_at).toFixed(2)});});parseJ(r.competitoritems).forEach(i=>{if(i.price&&i.currency)rows.push({'Fecha':fmtD(r.created_at),'Promotor':r.promoter_name||'','Comercio':r.trade||'','Tipo':'Competencia','Producto':i.presentation||'','Precio Original':i.price||'','Moneda':i.currency||'','USD':+toUSD(i.price,i.currency,r.created_at).toFixed(2)});});});return rows;},
+      anaquel:()=>filtData.filter(r=>r.shelf_meters).map(r=>({'Fecha':fmtD(r.created_at),'Promotor':r.promoter_name||'','Comercio':r.trade||'','Estado':r.state||'','Metros Propios':r.shelf_meters||0,'Metros Comp.':parseJ(r.competitoritems).reduce((s,i)=>s+(parseFloat(i.shelf_meters)||0),0).toFixed(2)})),
+      caras:()=>filtData.map(r=>({'Fecha':fmtD(r.created_at),'Promotor':r.promoter_name||'','Comercio':r.trade||'','Caras Antes':r.our_faces_before_counted||r.our_faces_before_manual||0,'Caras Después':r.our_faces_after||0,'Total Antes':r.total_faces_before||0,'Total Después':r.total_faces||0})),
+      stock:()=>{const rows=[];filtData.forEach(r=>parseJ(r.myitems).forEach(i=>{if(i.presentation==='SIN STOCK'||i.stock_shelf===0||i.stock_shelf===null)rows.push({'Fecha':fmtD(r.created_at),'Promotor':r.promoter_name||'','Comercio':r.trade||'','Producto':i.presentation||'','Stock Anaquel':i.stock_shelf??'SIN STOCK','Stock Bodega':i.stock_warehouse??'SIN STOCK'});}));return rows;},
+      promotores:()=>{const s={};allProms.forEach(p=>{s[p.promoter_name]={Promotor:p.promoter_name,Dias:p.dias_trabajo||5,Visitas:0,Meta:0,Confirmadas:0,'Cumpl %':0,'GPS %':0,'Metros m':0,'Δ Caras':0,Espacios:0,'Datos completos %':0};});filtData.forEach(r=>{const p=r.promoter_name;if(!s[p])return;s[p].Visitas++;s[p].Meta=s[p].Dias*8;if(isConfirmado(r))s[p].Confirmadas++;s[p]['Metros m']+=parseFloat(r.shelf_meters)||0;s[p]['Δ Caras']+=(parseFloat(r.our_faces_after)||0)-(parseFloat(r.our_faces_before_counted)||parseFloat(r.our_faces_before_manual)||0);let espArr=[];try{espArr=Array.isArray(r.espacios_adicionales)?r.espacios_adicionales:(r.espacios_adicionales?JSON.parse(r.espacios_adicionales):[]);}catch{}s[p].Espacios+=espArr.filter(e=>e.activo!==false&&e.tipo).length;});return Object.values(s).filter(x=>x.Visitas>0).map(x=>{x['Cumpl %']=x.Meta?Math.round(x.Confirmadas/x.Meta*100):0;x['GPS %']=x.Visitas?Math.round(x.Confirmadas/x.Visitas*100):0;x['Metros m']=+x['Metros m'].toFixed(2);x['Δ Caras']=+x['Δ Caras'].toFixed(0);return x;});},
+      espacios:()=>{const rows=[];filtData.forEach(r=>{let esp=[];try{esp=Array.isArray(r.espacios_adicionales)?r.espacios_adicionales:(r.espacios_adicionales?JSON.parse(r.espacios_adicionales):[]);}catch{}esp.filter(e=>e.activo!==false&&e.tipo).forEach(e=>rows.push({'Fecha':fmtD(r.created_at),'Promotor':r.promoter_name||'','Comercio':r.trade||'','Tipo':e.tipo,'Producto':e.producto||'','Capacidad':e.capacidad??e.unidades??''}));});return rows;},
+    };
+
+    // Hoja de resumen
+    const resumen=[['Reporte CAPTA'],['Empresa:',ENOMBRE],['Período:',`${desde} → ${hasta}`],['Registros:',filtData.length],['Generado:',new Date().toLocaleString('es-ES')]];
+    const wsRes=XLSX.utils.aoa_to_sheet(resumen);
+    XLSX.utils.book_append_sheet(wb,wsRes,'Info');
+
+    // Funciones multi-hoja para módulos específicos
+    const multiSheetFns={
+      precios:()=>{
+        const comp=[];
+        filtData.forEach(r=>{
+          parseJ(r.myitems).forEach(mi=>{
+            if(!mi.price||!mi.currency||mi.presentation==='SIN STOCK')return;
+            const nUSD=+toUSD(mi.price,mi.currency,r.created_at).toFixed(2);
+            const ci=parseJ(r.competitoritems).find(x=>x.price&&x.currency&&!x.sin_stock);
+            const cUSD=ci?+toUSD(ci.price,ci.currency,r.created_at).toFixed(2):null;
+            comp.push({'Fecha':fmtD(r.created_at),'Promotor':r.promoter_name||'','Comercio':r.trade||'','Estado':r.state||'','Zona':r.zone||'','Nuestro Producto':mi.presentation||'','USD Nuestro':nUSD,'Competidor':ci?.presentation||'','USD Comp.':cUSD??'','Δ%':cUSD?+((nUSD-cUSD)/cUSD*100).toFixed(1):''});
+          });
+        });
+        const bP={},bT={};
+        comp.forEach(x=>{
+          const p=x.Promotor;if(!bP[p])bP[p]={Promotor:p,Registros:0,_sN:0,_sC:0,_nd:0,_sd:0};
+          bP[p].Registros++;bP[p]._sN+=x['USD Nuestro'];
+          if(x['USD Comp.']!==''){bP[p]._sC+=x['USD Comp.'];bP[p]._nd++;bP[p]._sd+=x['Δ%'];}
+          const t=x.Comercio;if(!bT[t])bT[t]={Comercio:t,Estado:x.Estado,Zona:x.Zona,Registros:0,_sN:0,_sC:0,_nd:0,_sd:0};
+          bT[t].Registros++;bT[t]._sN+=x['USD Nuestro'];
+          if(x['USD Comp.']!==''){bT[t]._sC+=x['USD Comp.'];bT[t]._nd++;bT[t]._sd+=x['Δ%'];}
+        });
+        const porProm=Object.values(bP).map(x=>({'Promotor':x.Promotor,'Registros':x.Registros,'USD Prom. Nuestro':+(x._sN/x.Registros).toFixed(2),'USD Prom. Comp.':x._nd?+(x._sC/x._nd).toFixed(2):'','Δ% Promedio':x._nd?+(x._sd/x._nd).toFixed(1):''}));
+        const porTrade=Object.values(bT).map(x=>({'Comercio':x.Comercio,'Estado':x.Estado,'Zona':x.Zona,'Registros':x.Registros,'USD Prom. Nuestro':+(x._sN/x.Registros).toFixed(2),'USD Prom. Comp.':x._nd?+(x._sC/x._nd).toFixed(2):'','Δ% Promedio':x._nd?+(x._sd/x._nd).toFixed(1):''})).sort((a,b)=>b['USD Prom. Nuestro']-a['USD Prom. Nuestro']);
+        return[{name:'Comparaciones',data:comp},{name:'Por Promotor',data:porProm},{name:'Por Comercio',data:porTrade}];
+      },
+      caras:()=>{
+        const bPN={},bPC={};
+        const visitas=filtData.map(r=>{
+          let nA=0,nD=0,nc=0;
+          parseJ(r.myitems).forEach(i=>{if(i.sin_stock)return;const b=parseFloat(i.faces_before)||0,a=parseFloat(i.faces_after)||0;nA+=b;nD+=a;const k=i.presentation||'—';if(!bPN[k])bPN[k]={Producto:k,Antes:0,Después:0};bPN[k].Antes+=b;bPN[k].Después+=a;});
+          parseJ(r.competitoritems).forEach(i=>{if(i.sin_stock)return;const c=parseFloat(i.faces)||parseFloat(i.faces_after)||0;nc+=c;const k=i.presentation||'—';if(!bPC[k])bPC[k]={Producto:k,'Total Caras':0};bPC[k]['Total Caras']+=c;});
+          const tot=nD+nc;
+          return{Fecha:fmtD(r.created_at),Promotor:r.promoter_name||'',Comercio:r.trade||'','Nuestras Antes':nA,'Nuestras Después':nD,'Caras Comp.':nc,'Total Anaquel':tot,'SOS%':tot>0?+(nD/tot*100).toFixed(1):0,'Δ Caras':nD-nA};
+        });
+        const nuestros=Object.values(bPN).map(x=>({...x,'Δ':x['Después']-x['Antes']})).sort((a,b)=>b['Después']-a['Después']);
+        const comp=Object.values(bPC).sort((a,b)=>b['Total Caras']-a['Total Caras']);
+        return[{name:'Nuestros',data:nuestros},{name:'Competencia',data:comp},{name:'Por Visita',data:visitas}];
+      },
+      anaquel:()=>{
+        const bT={};
+        filtData.forEach(r=>{
+          const t=r.trade||'—';if(!bT[t])bT[t]={'Comercio':t,'Estado':r.state||'','MN':0,'MC':0};
+          bT[t].MN+=parseFloat(r.shelf_meters)||0;
+          parseJ(r.competitoritems).forEach(i=>{bT[t].MC+=parseFloat(i.shelf_meters)||0;});
+        });
+        const rows=Object.values(bT).map(x=>({Comercio:x.Comercio,Estado:x.Estado,'MN - Metros Nuestros':+x.MN.toFixed(2),'MC - Metros Comp.':+x.MC.toFixed(2),'MT - Total':+(x.MN+x.MC).toFixed(2),'% Propio':(x.MN+x.MC)>0?+(x.MN/(x.MN+x.MC)*100).toFixed(1):0})).sort((a,b)=>b['MN - Metros Nuestros']-a['MN - Metros Nuestros']);
+        return[{name:'Por Comercio',data:rows}];
+      },
+      stock:()=>{
+        const visitasPT={};filtData.forEach(r=>{const t=r.trade||'—';visitasPT[t]=(visitasPT[t]||0)+1;});
+        const bGrupo={},bTrade={},bProd={},detalle=[];
+        filtData.forEach(r=>{
+          parseJ(r.myitems).forEach(i=>{
+            if(i.presentation==='SIN STOCK'||i.stock_shelf===0||i.stock_shelf===null){
+              const t=r.trade||'—',p=i.presentation||'N/A',k=t+'|||'+p;
+              if(!bGrupo[k])bGrupo[k]={Comercio:t,Estado:r.state||'',Producto:p,Quiebres:0,_v:visitasPT[t]||1};
+              bGrupo[k].Quiebres++;
+              if(!bTrade[t])bTrade[t]={Comercio:t,Quiebres:0};bTrade[t].Quiebres++;
+              if(!bProd[p])bProd[p]={Producto:p,Quiebres:0};bProd[p].Quiebres++;
+              detalle.push({Fecha:fmtD(r.created_at),Promotor:r.promoter_name||'',Comercio:t,Producto:p,'Stock Anaquel':i.stock_shelf??'SIN STOCK','Stock Bodega':i.stock_warehouse??'—'});
+            }
+          });
+        });
+        const alertas=Object.values(bGrupo).map(x=>{const freq=Math.round(x.Quiebres/x._v*100);return{...x,Visitas:x._v,'Frecuencia %':freq,Prioridad:freq>=50?'CRÍTICO':freq>=25?'ALTO':'MEDIO'};}).sort((a,b)=>b['Frecuencia %']-a['Frecuencia %']);
+        return[{name:'Alertas Urgentes',data:alertas},{name:'Por Comercio',data:Object.values(bTrade).sort((a,b)=>b.Quiebres-a.Quiebres)},{name:'Por Producto',data:Object.values(bProd).sort((a,b)=>b.Quiebres-a.Quiebres)},{name:'Detalle',data:detalle}];
+      },
+    };
+
+    tabsToExport.forEach(tab=>{
+      if(multiSheetFns[tab]){
+        multiSheetFns[tab]().forEach(s=>{
+          if(!s.data||!s.data.length)return;
+          XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(s.data),s.name.slice(0,31));
+        });
+      } else {
+        const fn=dataFns[tab]; if(!fn)return;
+        const data=fn();
+        if(!data.length)return;
+        const ws=XLSX.utils.json_to_sheet(data);
+        const tabNames={gerencial:'Gerencial',precios:'Precios',anaquel:'Anaquel',caras:'Caras',stock:'Stock',promotores:'Promotores',espacios:'Espacios'};
+        XLSX.utils.book_append_sheet(wb,ws,tabNames[tab]||tab);
+      }
+    });
+
+    XLSX.writeFile(wb,`CAPTA_Reportes_${new Date().toISOString().split('T')[0]}.xlsx`);
+  }catch(e){console.error(e);}
+  finally{spinEl.style.display='none';}
+}
+
+// ════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════
+// Sincronizar dark mode con el navbar de CAPTA
+function syncDark(){
+  if(document.documentElement.classList.contains('dark')){
+    document.body.classList.add('dark');
+  } else {
+    document.body.classList.remove('dark');
+  }
+}
+syncDark();
+new MutationObserver(syncDark).observe(document.documentElement,{attributes:true,attributeFilter:['class']});
+
+window.captaReady(()=>boot());
+</script>
+</body>
+</html>

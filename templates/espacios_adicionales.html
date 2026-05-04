@@ -1,0 +1,717 @@
+{% include 'navbar.html' %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Espacios Adicionales — CAPTA</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config={darkMode:'class'}</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+<style>
+  .table-header-sticky th { position:sticky; top:0; z-index:10; background:#F9FAFB; }
+  .dark .table-header-sticky th { background:#334155; color:#e2e8f0; }
+  .badge { display:inline-flex; align-items:center; padding:.2rem .6rem; font-size:.7rem; font-weight:700; border-radius:9999px; white-space:nowrap; }
+  .com-dd { position:absolute; top:100%; left:0; z-index:200; width:100%; background:white; border:1px solid #e5e7eb; border-radius:8px; max-height:200px; overflow-y:auto; box-shadow:0 8px 24px rgba(0,0,0,.12); }
+  .dark .com-dd { background:#1e293b; border-color:#475569; }
+  .com-dd-item { padding:8px 12px; cursor:pointer; font-size:.83rem; border-bottom:1px solid #f3f4f6; }
+  .com-dd-item:hover { background:#f0f4ff; }
+  .dark .com-dd-item:hover { background:#334155; }
+  .tipo-torre     { background:#EEF2FF; color:#4338CA; }
+  .tipo-cabezal   { background:#FFF7ED; color:#C2410C; }
+  .tipo-paleta    { background:#F0FDF4; color:#15803D; }
+  .tipo-exhibicion{ background:#FDF4FF; color:#A21CAF; }
+  .row-hover:hover { background:rgba(79,70,229,.04) !important; }
+  .dark .row-hover:hover { background:rgba(139,92,246,.08) !important; }
+</style>
+</head>
+<body class="bg-gray-50 dark:bg-slate-900 text-gray-900 dark:text-gray-100 font-sans">
+
+<main class="container mx-auto p-4 sm:p-6 lg:p-8">
+
+  <!-- Título -->
+  <div class="mb-6 flex items-start justify-between flex-wrap gap-4">
+    <div>
+      <h1 class="text-3xl font-extrabold text-gray-800 dark:text-white">
+        <i class="fas fa-store mr-2 text-purple-500"></i>Espacios Adicionales
+      </h1>
+      <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+        Torres, Cabezales, Paletas y Exhibiciones ganadas por comercio.
+      </p>
+    </div>
+    <span id="badgeTotal" class="self-start bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 text-sm font-bold px-4 py-2 rounded-full">
+      — registros
+    </span>
+  </div>
+
+  <!-- KPIs -->
+  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-4 text-center border border-gray-100 dark:border-slate-700 shadow-sm">
+      <p class="text-2xl font-extrabold text-indigo-600" id="kComerciosTotal">—</p>
+      <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Comercios con espacios</p>
+    </div>
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-4 text-center border border-gray-100 dark:border-slate-700 shadow-sm">
+      <p class="text-2xl font-extrabold text-indigo-500" id="kTorres">—</p>
+      <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">🗼 Comercios con Torre</p>
+    </div>
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-4 text-center border border-gray-100 dark:border-slate-700 shadow-sm">
+      <p class="text-2xl font-extrabold text-orange-500" id="kCabezales">—</p>
+      <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">📐 Comercios con Cabezal</p>
+    </div>
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-4 text-center border border-gray-100 dark:border-slate-700 shadow-sm">
+      <p class="text-2xl font-extrabold text-green-600" id="kPaletas">—</p>
+      <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">🪵 Comercios con Paleta</p>
+    </div>
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-4 text-center border border-gray-100 dark:border-slate-700 shadow-sm">
+      <p class="text-2xl font-extrabold text-purple-600" id="kExhibiciones">—</p>
+      <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">🏪 Comercios con Exhibición</p>
+    </div>
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-4 text-center border border-gray-100 dark:border-slate-700 shadow-sm">
+      <p class="text-2xl font-extrabold text-gray-700 dark:text-gray-200" id="kEspaciosTotales">—</p>
+      <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Espacios totales</p>
+    </div>
+  </div>
+
+  <!-- Filtros -->
+  <div class="bg-white dark:bg-slate-800 shadow-sm rounded-2xl p-5 mb-6 border border-gray-100 dark:border-slate-700">
+    <h2 class="text-base font-bold text-gray-700 dark:text-white mb-4">Filtros</h2>
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-4">
+
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Desde</label>
+        <input type="date" id="fDesde" onchange="cargar()" class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm">
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Hasta</label>
+        <input type="date" id="fHasta" onchange="cargar()" class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm">
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Tipo de espacio</label>
+        <select id="fTipo" onchange="aplicar()" class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm">
+          <option value="">Todos</option>
+          <option value="Torre">🗼 Torre</option>
+          <option value="Cabezal">📐 Cabezal</option>
+          <option value="Paleta">🪵 Paleta</option>
+          <option value="Exhibición">🏪 Exhibición</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Promotor</label>
+        <select id="fPromotor" onchange="aplicar()" class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm">
+          <option value="">Todos</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Estado</label>
+        <select id="fEstado" onchange="cargar()" class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm">
+          <option value="">Todos</option>
+        </select>
+      </div>
+
+      <div class="relative" id="comercioWrap">
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Comercio</label>
+        <input type="text" id="fComercio" placeholder="Buscar comercio…"
+          class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm"
+          oninput="buscarComercio(this.value)" autocomplete="off">
+        <input type="hidden" id="fComercioVal">
+        <div id="comercioDD" class="com-dd" style="display:none"></div>
+      </div>
+
+      <div class="relative" id="productoWrap">
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Producto</label>
+        <input type="text" id="fProducto" placeholder="Buscar producto…"
+          class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm"
+          oninput="buscarProducto(this.value)" onchange="aplicar()" autocomplete="off">
+        <input type="hidden" id="fProductoVal">
+        <div id="productoDD" class="com-dd" style="display:none"></div>
+      </div>
+
+    </div>
+    <div class="flex gap-3 border-t border-gray-100 dark:border-slate-700 pt-4 flex-wrap">
+      <button onclick="aplicar()"
+        class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-5 rounded-lg shadow transition-all flex items-center gap-2">
+        <i class="fas fa-filter"></i> Filtrar
+      </button>
+      <button onclick="limpiar()"
+        class="bg-gray-100 hover:bg-gray-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-gray-600 dark:text-gray-300 font-semibold py-2 px-4 rounded-lg transition-all flex items-center gap-2">
+        <i class="fas fa-undo"></i> Limpiar
+      </button>
+      <button onclick="exportXLS()"
+        class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 px-4 rounded-lg transition-all flex items-center gap-2 ml-auto">
+        <i class="fas fa-file-excel"></i> Exportar Excel
+      </button>
+    </div>
+  </div>
+
+  <!-- Gráfico resumen -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 border border-gray-100 dark:border-slate-700 shadow-sm">
+      <h3 class="text-sm font-bold text-gray-700 dark:text-white mb-4">
+        Distribución de tipos de espacio <span class="text-xs font-normal text-gray-400">(comercios únicos)</span>
+      </h3>
+      <div style="position:relative;height:220px">
+        <canvas id="chartTipos"></canvas>
+      </div>
+    </div>
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 border border-gray-100 dark:border-slate-700 shadow-sm">
+      <h3 class="text-sm font-bold text-gray-700 dark:text-white mb-4">
+        Top 10 comercios con más tipos de espacio
+      </h3>
+      <div style="position:relative;height:220px">
+        <canvas id="chartTop"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabla principal: por comercio -->
+  <div class="bg-white dark:bg-slate-800 shadow-sm rounded-2xl border border-gray-100 dark:border-slate-700 overflow-hidden mb-6">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-slate-700">
+      <div>
+        <h2 class="text-base font-bold text-gray-700 dark:text-white">Espacios por comercio</h2>
+        <p class="text-xs text-gray-400 mt-0.5">Cada fila = un espacio ganado en un comercio específico</p>
+      </div>
+      <span id="infoTabla" class="text-xs font-semibold text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 dark:text-indigo-300 px-3 py-1 rounded-full">—</span>
+    </div>
+    <div class="overflow-x-auto max-h-[65vh]">
+      <table class="min-w-full divide-y divide-gray-100 dark:divide-slate-700">
+        <thead class="table-header-sticky">
+          <tr>
+            <th class="py-3 px-4 text-left text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Fecha visita</th>
+            <th class="py-3 px-4 text-left text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Promotor</th>
+            <th class="py-3 px-4 text-left text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Comercio</th>
+            <th class="py-3 px-4 text-left text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Estado / Zona</th>
+            <th class="py-3 px-4 text-center text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Tipo</th>
+            <th class="py-3 px-4 text-left text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Producto</th>
+            <th class="py-3 px-4 text-center text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cap. ref.</th>
+          </tr>
+        </thead>
+        <tbody id="tbody" class="bg-white dark:bg-slate-800 divide-y divide-gray-50 dark:divide-slate-700">
+          <tr>
+            <td colspan="7" class="text-center py-12 text-gray-400 dark:text-gray-500">
+              <i class="fas fa-spinner fa-spin text-indigo-400 text-2xl block mb-2"></i>
+              Cargando datos...
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Vista agrupada por comercio -->
+  <div class="bg-white dark:bg-slate-800 shadow-sm rounded-2xl border border-gray-100 dark:border-slate-700 overflow-hidden">
+    <div class="px-6 py-4 border-b border-gray-100 dark:border-slate-700">
+      <h2 class="text-base font-bold text-gray-700 dark:text-white">Resumen por comercio</h2>
+      <p class="text-xs text-gray-400 mt-0.5">Todos los espacios activos agrupados por punto de venta</p>
+    </div>
+    <div id="resumenComercio" class="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      <div class="text-center py-8 text-gray-400 text-sm col-span-full">
+        <i class="fas fa-store text-2xl block mb-2 opacity-30"></i>Aplica los filtros para ver el resumen
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+const empresaId = localStorage.getItem('empresa_id');
+if (!empresaId) window.location.replace('/');
+
+let allRows = [];
+let allComercioNames = [];
+let allProductoNames = [];
+let chartTipos = null, chartTop = null;
+let comercioTimer = null, productoTimer = null;
+
+const TIPO_CONFIG = {
+  'Torre':      { icon:'🗼', cls:'tipo-torre' },
+  'Cabezal':    { icon:'📐', cls:'tipo-cabezal' },
+  'Paleta':     { icon:'🪵', cls:'tipo-paleta' },
+  'Exhibición': { icon:'🏪', cls:'tipo-exhibicion' },
+};
+
+function fmtDate(s) {
+  return new Date(s).toLocaleDateString('es-ES', { day:'2-digit', month:'short', year:'numeric' });
+}
+
+async function loadCatalogs() {
+  const db = window.db;
+  const eid = empresaId;
+
+  const [{ data: prom }, { data: est }] = await Promise.all([
+    db.from('web_promotores').select('promoter_name').eq('empresa_id', eid).order('promoter_name'),
+    db.from('web_estados').select('nombre').order('nombre'),
+  ]);
+  const ps = document.getElementById('fPromotor');
+  ps.innerHTML = '<option value="">Todos</option>' + (prom || []).map(p => `<option value="${p.promoter_name}">${p.promoter_name}</option>`).join('');
+
+  const es = document.getElementById('fEstado');
+  es.innerHTML = '<option value="">Todos</option>' + (est || []).map(e => `<option value="${e.nombre}">${e.nombre}</option>`).join('');
+}
+
+async function cargar() {
+  const desde  = document.getElementById('fDesde').value;
+  const hasta  = document.getElementById('fHasta').value;
+  const prom   = document.getElementById('fPromotor').value;
+  const estado = document.getElementById('fEstado').value;
+
+  document.getElementById('tbody').innerHTML = `
+    <tr><td colspan="7" class="text-center py-12 text-gray-400">
+      <i class="fas fa-spinner fa-spin text-indigo-400 text-2xl block mb-2"></i>Cargando...
+    </td></tr>`;
+
+  let q = window.db.from('web_precios')
+    .select('id, created_at, promoter_name, trade, state, zone, espacios_adicionales')
+    .eq('empresa_id', empresaId)
+    .not('espacios_adicionales', 'is', null)
+    .order('created_at', { ascending: false });
+
+  if (desde)  q = q.gte('created_at', desde + 'T00:00:00+00:00');
+  if (hasta)  q = q.lte('created_at', hasta + 'T23:59:59+00:00');
+  if (prom)   q = q.eq('promoter_name', prom);
+  if (estado) q = q.eq('state', estado);
+
+  const lineaId = localStorage.getItem('sp-linea') || '';
+  if (lineaId) q = q.eq('linea_id', lineaId);
+
+  const { data, error } = await q;
+  if (error) {
+    document.getElementById('tbody').innerHTML =
+      `<tr><td colspan="7" class="text-center py-8 text-red-400">Error: ${error.message}</td></tr>`;
+    return;
+  }
+
+  const ultimoPorComercio = new Map();
+  (data || []).forEach(r => {
+    if (!ultimoPorComercio.has(r.trade)) {
+      ultimoPorComercio.set(r.trade, r);
+    }
+  });
+
+  allRows = [];
+  const comercioSet = new Set();
+  const productoSet = new Set();
+
+  ultimoPorComercio.forEach((r) => {
+    let esp = r.espacios_adicionales;
+    if (typeof esp === 'string') { try { esp = JSON.parse(esp); } catch { esp = []; } }
+    if (!Array.isArray(esp) || esp.length === 0) return;
+
+    const activos = esp.filter(e => e.activo !== false && e.tipo && e.producto);
+    if (activos.length === 0) return;
+
+    activos.forEach(e => {
+      allRows.push({
+        fecha:     r.created_at,
+        promotor:  r.promoter_name || '—',
+        comercio:  r.trade || '—',
+        state:     r.state || '—',
+        zone:      r.zone  || '—',
+        tipo:      e.tipo,
+        producto:  e.producto,
+        capacidad: e.capacidad ?? null,
+      });
+      comercioSet.add(r.trade || '—');
+      productoSet.add(e.producto);
+    });
+  });
+
+  allComercioNames = [...comercioSet].sort();
+  allProductoNames = [...productoSet].sort();
+
+  aplicar();
+}
+
+function aplicar() {
+  const tipo     = document.getElementById('fTipo').value;
+  const comercio = document.getElementById('fComercioVal').value;
+  const producto = document.getElementById('fProductoVal').value;
+  const prom     = document.getElementById('fPromotor').value;
+
+  let filtered = allRows;
+  if (tipo)     filtered = filtered.filter(r => r.tipo === tipo);
+  if (comercio) filtered = filtered.filter(r => r.comercio === comercio);
+  if (producto) filtered = filtered.filter(r => r.producto.toLowerCase().includes(producto.toLowerCase()));
+  if (prom)     filtered = filtered.filter(r => r.promotor === prom);
+
+  renderKPIs(filtered);
+  renderTabla(filtered);
+  renderCharts(filtered);
+  renderResumenComercio(filtered);
+  document.getElementById('badgeTotal').textContent = `${filtered.length} espacios`;
+  document.getElementById('infoTabla').textContent  = `${filtered.length} registros`;
+}
+
+function renderKPIs(rows) {
+  const porTipo = { Torre: new Set(), Cabezal: new Set(), Paleta: new Set(), 'Exhibición': new Set() };
+  const comerciosTotal = new Set();
+  rows.forEach(r => {
+    comerciosTotal.add(r.comercio);
+    if (porTipo[r.tipo]) porTipo[r.tipo].add(r.comercio);
+  });
+  document.getElementById('kComerciosTotal').textContent = comerciosTotal.size;
+  document.getElementById('kTorres').textContent      = porTipo['Torre'].size;
+  document.getElementById('kCabezales').textContent   = porTipo['Cabezal'].size;
+  document.getElementById('kPaletas').textContent     = porTipo['Paleta'].size;
+  document.getElementById('kExhibiciones').textContent= porTipo['Exhibición'].size;
+  document.getElementById('kEspaciosTotales').textContent = rows.length;
+}
+
+// ── Tabla detalle — agrupada por comercio+tipo ────────────────────
+function renderTabla(rows) {
+  const tbody = document.getElementById('tbody');
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center py-10 text-gray-400 dark:text-gray-500">
+      <i class="fas fa-inbox text-2xl block mb-2 opacity-30"></i>Sin espacios para los filtros aplicados
+    </td></tr>`;
+    return;
+  }
+
+  const grupos = {};
+  rows.forEach(r => {
+    const key = r.comercio + '||' + r.tipo;
+    if (!grupos[key]) {
+      grupos[key] = { fecha: r.fecha, promotor: r.promotor, comercio: r.comercio,
+                      state: r.state, zone: r.zone, tipo: r.tipo, items: [] };
+    }
+    grupos[key].items.push({ producto: r.producto, capacidad: r.capacidad });
+  });
+
+  let html = '';
+  let idx = 0;
+  Object.values(grupos).forEach(g => {
+    const cfg = TIPO_CONFIG[g.tipo] || { icon:'📦', cls:'bg-gray-100 text-gray-600' };
+    const totalCap = g.items.reduce((s, i) => s + (i.capacidad != null ? Number(i.capacidad) : 0), 0);
+    const hasMulti = g.items.length > 1;
+    const gid = `grp-${idx++}`;
+
+    const prodLabel = hasMulti
+      ? `<span class="font-semibold">${g.items.length} productos</span>`
+      : `<span class="font-semibold">${g.items[0].producto}</span>`;
+    const prodCls = hasMulti
+      ? 'bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'
+      : 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300';
+
+    html += `<tr class="row-hover transition-colors${hasMulti ? ' cursor-pointer' : ''}"
+      ${hasMulti ? `onclick="toggleGrupo('${gid}')"` : ''}>
+      <td class="py-3 px-4 text-sm font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">${fmtDate(g.fecha)}</td>
+      <td class="py-3 px-4 text-sm text-indigo-600 dark:text-indigo-400 font-medium">${g.promotor}</td>
+      <td class="py-3 px-4"><span class="text-sm font-bold text-gray-800 dark:text-white">${g.comercio}</span></td>
+      <td class="py-3 px-4 text-xs text-gray-500 dark:text-gray-400">${g.state}${g.zone && g.zone !== '—' ? ' / ' + g.zone : ''}</td>
+      <td class="py-3 px-4 text-center"><span class="badge ${cfg.cls}">${cfg.icon} ${g.tipo}</span></td>
+      <td class="py-3 px-4">
+        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 ${prodCls} rounded-lg text-sm">
+          <i class="fas fa-cube text-xs"></i> ${prodLabel}
+          ${hasMulti ? `<i class="fas fa-chevron-down text-xs ml-1 transition-transform" id="icon-${gid}"></i>` : ''}
+        </span>
+      </td>
+      <td class="py-3 px-4 text-center text-sm font-semibold text-gray-700 dark:text-gray-300">
+        ${totalCap > 0 ? `<span class="text-indigo-600 dark:text-indigo-400">${totalCap}</span> unid.` : '<span class="text-gray-300">—</span>'}
+      </td>
+    </tr>`;
+
+    if (hasMulti) {
+      html += `<tr id="${gid}" style="display:none">
+        <td colspan="7" class="p-0">
+          <div class="bg-gray-50 dark:bg-slate-700/50">
+            ${g.items.map(i => `
+              <div class="flex items-center justify-between px-16 py-2 border-t border-gray-100 dark:border-slate-600">
+                <span class="text-sm text-gray-700 dark:text-gray-200">
+                  <i class="fas fa-cube text-xs text-green-500 mr-2"></i>${i.producto}
+                </span>
+                <span class="text-xs text-gray-400">${i.capacidad != null ? i.capacidad + ' unid.' : '—'}</span>
+              </div>`).join('')}
+          </div>
+        </td>
+      </tr>`;
+    }
+  });
+
+  tbody.innerHTML = html;
+}
+
+function toggleGrupo(gid) {
+  const row  = document.getElementById(gid);
+  const icon = document.getElementById('icon-' + gid);
+  if (!row) return;
+  const open = row.style.display !== 'none';
+  row.style.display = open ? 'none' : 'table-row';
+  if (icon) icon.style.transform = open ? '' : 'rotate(180deg)';
+}
+
+function renderCharts(rows) {
+  const dark = document.documentElement.classList.contains('dark');
+  const tc   = dark ? '#94a3b8' : '#6b7280';
+
+  const porTipo = {};
+  rows.forEach(r => {
+    if (!porTipo[r.tipo]) porTipo[r.tipo] = new Set();
+    porTipo[r.tipo].add(r.comercio);
+  });
+  const tipoE = Object.entries(porTipo).map(([t, s]) => ({ t, n: s.size })).sort((a,b) => b.n - a.n);
+
+  if (chartTipos) chartTipos.destroy();
+  chartTipos = new Chart(document.getElementById('chartTipos').getContext('2d'), {
+    type: 'doughnut',
+    data: {
+      labels: tipoE.map(x => x.t),
+      datasets: [{
+        data: tipoE.map(x => x.n),
+        backgroundColor: ['#818CF8','#FB923C','#4ADE80','#E879F9'],
+        borderWidth: 0,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '62%',
+      plugins: {
+        legend: { position:'bottom', labels:{ color:tc, font:{size:11}, padding:12, boxWidth:12 } },
+        tooltip: { callbacks: { label: c => ` ${c.label}: ${c.parsed} comercios` } }
+      }
+    }
+  });
+
+  const porComercio = {};
+  rows.forEach(r => {
+    if (!porComercio[r.comercio]) porComercio[r.comercio] = new Set();
+    porComercio[r.comercio].add(r.tipo + '|' + r.producto);
+  });
+  const topC = Object.entries(porComercio)
+    .map(([k, s]) => ({ k, n: s.size }))
+    .sort((a,b) => b.n - a.n)
+    .slice(0, 10);
+
+  if (chartTop) chartTop.destroy();
+  const gc = dark ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.05)';
+  chartTop = new Chart(document.getElementById('chartTop').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: topC.map(x => x.k.length > 18 ? x.k.slice(0, 16) + '…' : x.k),
+      datasets: [{
+        data: topC.map(x => x.n),
+        backgroundColor: '#818CF8',
+        borderRadius: 5,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+      plugins: { legend: { display:false } },
+      scales: {
+        x: { ticks:{ color:tc, font:{size:10} }, grid:{ color:gc } },
+        y: { ticks:{ color:tc, font:{size:10} }, grid:{ display:false } },
+      }
+    }
+  });
+}
+
+function renderResumenComercio(rows) {
+  const container = document.getElementById('resumenComercio');
+
+  if (!rows.length) {
+    container.innerHTML = `<div class="text-center py-8 text-gray-400 text-sm col-span-full">
+      <i class="fas fa-store text-2xl block mb-2 opacity-30"></i>Sin datos
+    </div>`;
+    return;
+  }
+
+  const porComercio = {};
+  rows.forEach(r => {
+    if (!porComercio[r.comercio]) {
+      porComercio[r.comercio] = { state: r.state, zone: r.zone, espacios: [] };
+    }
+    porComercio[r.comercio].espacios.push(r);
+  });
+
+  const sorted = Object.entries(porComercio).sort((a,b) => b[1].espacios.length - a[1].espacios.length);
+
+  container.innerHTML = sorted.map(([nombre, data]) => {
+    const porTipo = {};
+    data.espacios.forEach(e => {
+      if (!porTipo[e.tipo]) porTipo[e.tipo] = [];
+      porTipo[e.tipo].push(e);
+    });
+
+    const tipoCards = Object.entries(porTipo).map(([tipo, items]) => {
+      const cfg = TIPO_CONFIG[tipo] || { icon:'📦', cls:'bg-gray-100 text-gray-600' };
+      const productosUnicos = [...new Map(items.map(i => [i.producto, i])).values()];
+      return `
+        <div class="rounded-xl p-3 border ${cfg.cls === 'tipo-torre' ? 'border-indigo-200 bg-indigo-50 dark:bg-indigo-900/20 dark:border-indigo-700' : cfg.cls === 'tipo-cabezal' ? 'border-orange-200 bg-orange-50 dark:bg-orange-900/20 dark:border-orange-700' : cfg.cls === 'tipo-paleta' ? 'border-green-200 bg-green-50 dark:bg-green-900/20 dark:border-green-700' : 'border-purple-200 bg-purple-50 dark:bg-purple-900/20 dark:border-purple-700'}">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="text-lg">${cfg.icon}</span>
+            <span class="font-bold text-sm">${tipo}</span>
+            <span class="ml-auto text-xs font-bold opacity-60">${items.length} reg.</span>
+          </div>
+          ${productosUnicos.map(i => `
+            <div class="flex items-center justify-between text-xs py-1 border-t border-black/5 dark:border-white/10">
+              <span class="font-medium text-gray-700 dark:text-gray-200 truncate max-w-[70%]">${i.producto}</span>
+              ${i.capacidad != null ? `<span class="text-gray-400 ml-2 flex-shrink-0">${i.capacidad} unid.</span>` : ''}
+            </div>`).join('')}
+        </div>`;
+    }).join('');
+
+    return `
+      <div class="bg-white dark:bg-slate-700 rounded-2xl border border-gray-100 dark:border-slate-600 shadow-sm overflow-hidden">
+        <div class="px-4 py-3 bg-gray-50 dark:bg-slate-800 border-b border-gray-100 dark:border-slate-600">
+          <p class="font-bold text-gray-800 dark:text-white text-sm truncate">${nombre}</p>
+          <p class="text-xs text-gray-400 mt-0.5">${data.state}${data.zone && data.zone !== '—' ? ' / ' + data.zone : ''} · ${data.espacios.length} espacio${data.espacios.length !== 1 ? 's' : ''}</p>
+        </div>
+        <div class="p-3 grid grid-cols-1 gap-2">${tipoCards}</div>
+      </div>`;
+  }).join('');
+}
+
+function buscarComercio(term) {
+  clearTimeout(comercioTimer);
+  document.getElementById('fComercioVal').value = '';
+  const dd = document.getElementById('comercioDD');
+  if (!term.trim()) { dd.style.display = 'none'; return; }
+  comercioTimer = setTimeout(() => {
+    const matches = allComercioNames
+      .filter(c => c.toLowerCase().includes(term.toLowerCase()))
+      .slice(0, 15);
+    if (!matches.length) { dd.style.display = 'none'; return; }
+    dd.innerHTML = matches.map(c =>
+      `<div class="com-dd-item" onmousedown="selecComercio('${c.replace(/'/g,"\\'")}')">
+        <i class="fas fa-store mr-2 text-indigo-400 text-xs"></i>${c}
+      </div>`
+    ).join('');
+    dd.style.display = 'block';
+  }, 200);
+}
+function selecComercio(val) {
+  document.getElementById('fComercio').value   = val;
+  document.getElementById('fComercioVal').value = val;
+  document.getElementById('comercioDD').style.display = 'none';
+}
+
+function buscarProducto(term) {
+  clearTimeout(productoTimer);
+  document.getElementById('fProductoVal').value = term;
+  const dd = document.getElementById('productoDD');
+  if (!term.trim()) { dd.style.display = 'none'; return; }
+  productoTimer = setTimeout(() => {
+    const matches = allProductoNames
+      .filter(p => p.toLowerCase().includes(term.toLowerCase()))
+      .slice(0, 15);
+    if (!matches.length) { dd.style.display = 'none'; return; }
+    dd.innerHTML = matches.map(p =>
+      `<div class="com-dd-item" onmousedown="selecProducto('${p.replace(/'/g,"\\'")}')">
+        <i class="fas fa-box mr-2 text-green-400 text-xs"></i>${p}
+      </div>`
+    ).join('');
+    dd.style.display = 'block';
+  }, 200);
+}
+function selecProducto(val) {
+  document.getElementById('fProducto').value   = val;
+  document.getElementById('fProductoVal').value = val;
+  document.getElementById('productoDD').style.display = 'none';
+}
+
+document.addEventListener('click', e => {
+  if (!document.getElementById('comercioWrap')?.contains(e.target))
+    document.getElementById('comercioDD').style.display = 'none';
+  if (!document.getElementById('productoWrap')?.contains(e.target))
+    document.getElementById('productoDD').style.display = 'none';
+});
+
+function limpiar() {
+  setDefaultDates();
+  document.getElementById('fTipo').value = '';
+  document.getElementById('fPromotor').value = '';
+  document.getElementById('fEstado').value = '';
+  document.getElementById('fComercio').value = '';
+  document.getElementById('fComercioVal').value = '';
+  document.getElementById('fProducto').value = '';
+  document.getElementById('fProductoVal').value = '';
+  cargar();
+}
+
+function setDefaultDates() {
+  const hoy = new Date().toISOString().split('T')[0];
+  document.getElementById('fHasta').value = hoy;
+  document.getElementById('fDesde').value = hoy;
+}
+
+function exportXLS() {
+  try {
+    const wb   = XLSX.utils.book_new();
+    const desde = document.getElementById('fDesde').value;
+    const hasta  = document.getElementById('fHasta').value;
+
+    const tipo     = document.getElementById('fTipo').value;
+    const comercio = document.getElementById('fComercioVal').value;
+    const producto = document.getElementById('fProductoVal').value;
+    const prom     = document.getElementById('fPromotor').value;
+
+    let filtered = allRows;
+    if (tipo)     filtered = filtered.filter(r => r.tipo === tipo);
+    if (comercio) filtered = filtered.filter(r => r.comercio === comercio);
+    if (producto) filtered = filtered.filter(r => r.producto.toLowerCase().includes(producto.toLowerCase()));
+    if (prom)     filtered = filtered.filter(r => r.promotor === prom);
+
+    if (!filtered.length) { alert('Sin datos para exportar.'); return; }
+
+    const det = filtered.map(r => ({
+      'Fecha':     new Date(r.fecha).toLocaleDateString('es-ES'),
+      'Promotor':  r.promotor,
+      'Comercio':  r.comercio,
+      'Estado':    r.state,
+      'Zona':      r.zone,
+      'Tipo':      r.tipo,
+      'Producto':  r.producto,
+      'Capacidad': r.capacidad ?? '',
+    }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(det), 'Detalle');
+
+    const grupos = {};
+    filtered.forEach(r => {
+      const key = r.comercio + '||' + r.tipo;
+      if (!grupos[key]) grupos[key] = { comercio: r.comercio, state: r.state, zone: r.zone, tipo: r.tipo, productos: [], totalCap: 0 };
+      grupos[key].productos.push(r.producto);
+      grupos[key].totalCap += r.capacidad != null ? Number(r.capacidad) : 0;
+    });
+    const agr = Object.values(grupos).map(g => ({
+      'Comercio':          g.comercio,
+      'Estado':            g.state,
+      'Zona':              g.zone,
+      'Tipo':              g.tipo,
+      'Cantidad Productos': g.productos.length,
+      'Productos':         [...new Set(g.productos)].join(' | '),
+      'Capacidad Total':   g.totalCap || '',
+    }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(agr), 'Agrupado');
+
+    XLSX.writeFile(wb, `CAPTA_Espacios_${desde}_${hasta}.xlsx`);
+  } catch(e) { console.error(e); alert('Error al exportar.'); }
+}
+
+window.onLineaChanged = (lineaId) => {
+  if (lineaId) localStorage.setItem('sp-linea', lineaId);
+  document.getElementById('fPromotor').value = '';
+  document.getElementById('fPromotor').innerHTML = '<option value="">Todos</option>';
+  document.getElementById('fEstado').value = '';
+  document.getElementById('fTipo').value = '';
+  document.getElementById('fComercio').value = '';
+  document.getElementById('fComercioVal').value = '';
+  document.getElementById('fProducto').value = '';
+  document.getElementById('fProductoVal').value = '';
+  loadCatalogs().then(() => cargar());
+};
+
+function waitDb(fn) {
+  if (window.db) { fn(); return; }
+  const t = setInterval(() => { if (window.db) { clearInterval(t); fn(); } }, 50);
+}
+
+waitDb(async () => {
+  setDefaultDates();
+  await loadCatalogs();
+  await cargar();
+});
+</script>
+</body>
+</html>

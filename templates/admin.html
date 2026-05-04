@@ -1,0 +1,1560 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CAPTA — Consola de Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+:root{
+  --bg:#07070d;--surface:#0e0e18;--card:#131320;--card2:#1a1a2a;
+  --brd:#252535;--brd2:#333348;--txt:#e8e8f4;--muted:#6b6b8a;--muted2:#4a4a6a;
+  --accent:#6c63ff;--accent2:#a78bfa;--green:#22d3a0;--amber:#f59e0b;
+  --red:#f43f5e;--cyan:#06b6d4;--blue:#3b82f6;--r:14px;--r2:8px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--txt);min-height:100vh}
+body{display:flex}
+
+/* ── SIDEBAR ── */
+.sidebar{width:230px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--brd);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
+.sb-logo{padding:22px 20px 18px;border-bottom:1px solid var(--brd)}
+.sb-logo-mark{font-family:'Space Mono',monospace;font-size:1.25rem;font-weight:700;color:var(--accent2);letter-spacing:3px}
+.sb-logo-sub{font-size:.58rem;color:var(--muted);text-transform:uppercase;letter-spacing:4px;margin-top:3px}
+.sb-section{font-size:.58rem;text-transform:uppercase;letter-spacing:3px;color:var(--muted2);padding:18px 20px 5px}
+.sb-link{display:flex;align-items:center;gap:10px;padding:9px 20px;font-size:.82rem;color:var(--muted);cursor:pointer;border:none;background:none;width:100%;text-align:left;transition:all .15s;border-left:2px solid transparent;position:relative}
+.sb-link:hover{color:var(--txt);background:rgba(108,99,255,.05)}
+.sb-link.active{color:var(--accent2);background:rgba(108,99,255,.08);border-left-color:var(--accent2)}
+.sb-link i{width:16px;text-align:center;font-size:.82rem}
+.sb-link .alert-dot{width:6px;height:6px;background:var(--red);border-radius:50%;position:absolute;right:16px;box-shadow:0 0 6px var(--red);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.sb-bottom{margin-top:auto;padding:14px 20px;border-top:1px solid var(--brd);display:flex;align-items:center;justify-content:space-between}
+.sb-version{font-size:.62rem;color:var(--muted);font-family:'Space Mono',monospace}
+
+/* ── MAIN ── */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+.topbar{height:56px;background:var(--surface);border-bottom:1px solid var(--brd);display:flex;align-items:center;justify-content:space-between;padding:0 24px;position:sticky;top:0;z-index:50;gap:12px}
+.topbar-title{font-size:.9rem;font-weight:600;white-space:nowrap}
+.topbar-right{display:flex;align-items:center;gap:10px}
+.admin-badge{font-size:.65rem;background:rgba(108,99,255,.12);color:var(--accent2);border:1px solid rgba(108,99,255,.25);padding:3px 10px;border-radius:99px;font-weight:700;font-family:'Space Mono',monospace;white-space:nowrap}
+.btn-logout{font-size:.75rem;color:var(--muted);background:none;border:1px solid var(--brd);padding:5px 11px;border-radius:var(--r2);cursor:pointer;transition:all .15s}
+.btn-logout:hover{color:var(--red);border-color:var(--red)}
+.content{flex:1;overflow-y:auto;padding:24px}
+.section{display:none}
+.section.active{display:block}
+.page-hdr{margin-bottom:22px}
+.page-title{font-size:1.25rem;font-weight:700}
+.page-sub{font-size:.8rem;color:var(--muted);margin-top:4px}
+
+/* ── STATS ── */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:24px}
+.stat-card{background:var(--card);border:1px solid var(--brd);border-radius:var(--r);padding:16px}
+.stat-num{font-size:1.8rem;font-weight:700;font-family:'Space Mono',monospace;line-height:1}
+.stat-lbl{font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-top:5px}
+.stat-green .stat-num{color:var(--green)}
+.stat-accent .stat-num{color:var(--accent2)}
+.stat-amber .stat-num{color:var(--amber)}
+.stat-cyan .stat-num{color:var(--cyan)}
+.stat-red .stat-num{color:var(--red)}
+
+/* ── CARD ── */
+.card{background:var(--card);border:1px solid var(--brd);border-radius:var(--r);padding:20px;margin-bottom:18px}
+.card-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px}
+.card-title{font-size:.88rem;font-weight:600}
+
+/* ── TABLE ── */
+.tbl-wrap{overflow-x:auto}
+.tbl{width:100%;border-collapse:collapse;font-size:.82rem}
+.tbl th{text-align:left;padding:9px 14px;font-size:.62rem;text-transform:uppercase;letter-spacing:2px;color:var(--muted);border-bottom:1px solid var(--brd);background:var(--card2)}
+.tbl td{padding:11px 14px;border-bottom:1px solid var(--brd);vertical-align:middle}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tr:hover td{background:rgba(108,99,255,.03)}
+
+/* ── BADGES ── */
+.plan-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:99px;font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:1px}
+.plan-full{background:rgba(34,211,160,.1);color:var(--green);border:1px solid rgba(34,211,160,.25)}
+.plan-mid{background:rgba(245,158,11,.1);color:var(--amber);border:1px solid rgba(245,158,11,.25)}
+.plan-basic{background:rgba(107,114,128,.1);color:#9ca3af;border:1px solid rgba(107,114,128,.25)}
+.plan-custom{background:rgba(108,99,255,.1);color:var(--accent2);border:1px solid rgba(108,99,255,.25)}
+.dot{width:7px;height:7px;border-radius:50%;display:inline-block;flex-shrink:0}
+.dot-green{background:var(--green);box-shadow:0 0 6px var(--green)}
+.dot-red{background:var(--red);box-shadow:0 0 6px var(--red)}
+.dot-amber{background:var(--amber);box-shadow:0 0 5px var(--amber)}
+.pago-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:99px;font-size:.65rem;font-weight:700}
+.pago-ok{background:rgba(34,211,160,.1);color:var(--green);border:1px solid rgba(34,211,160,.25)}
+.pago-alerta{background:rgba(245,158,11,.1);color:var(--amber);border:1px solid rgba(245,158,11,.25)}
+.pago-vencido{background:rgba(244,63,94,.1);color:var(--red);border:1px solid rgba(244,63,94,.25)}
+.pago-pendiente{background:rgba(107,114,128,.1);color:#9ca3af;border:1px solid rgba(107,114,128,.25)}
+
+/* ── MODS ── */
+.mod-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:9px}
+.mod-item{background:var(--card2);border:1px solid var(--brd);border-radius:var(--r2);padding:11px 13px;display:flex;align-items:center;justify-content:space-between;transition:border-color .2s}
+.mod-item.on{border-color:rgba(34,211,160,.3)}
+.mod-name{font-size:.78rem;font-weight:500}
+.mod-key{font-size:.6rem;color:var(--muted);font-family:'Space Mono',monospace;margin-top:2px}
+.toggle{position:relative;width:36px;height:20px;flex-shrink:0}
+.toggle input{opacity:0;width:0;height:0}
+.toggle-sl{position:absolute;inset:0;background:var(--brd2);border-radius:99px;cursor:pointer;transition:.25s}
+.toggle-sl:before{content:'';position:absolute;width:14px;height:14px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.25s}
+.toggle input:checked+.toggle-sl{background:var(--green)}
+.toggle input:checked+.toggle-sl:before{transform:translateX(16px)}
+
+/* ── MODAL ── */
+.overlay{display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.75);backdrop-filter:blur(4px);align-items:center;justify-content:center;padding:16px}
+.overlay.open{display:flex}
+.modal{background:var(--card);border:1px solid var(--brd2);border-radius:var(--r);width:min(760px,96vw);max-height:92vh;overflow-y:auto;box-shadow:0 32px 80px rgba(0,0,0,.7)}
+.modal-hdr{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--brd);position:sticky;top:0;background:var(--card);z-index:2}
+.modal-title{font-size:.95rem;font-weight:600;display:flex;align-items:center;gap:8px}
+.modal-close{background:none;border:none;color:var(--muted);cursor:pointer;font-size:1rem;padding:4px 8px;border-radius:var(--r2);transition:color .15s}
+.modal-close:hover{color:var(--red)}
+.modal-body{padding:22px}
+.modal-footer{display:flex;justify-content:flex-end;gap:8px;padding:14px 22px;border-top:1px solid var(--brd);position:sticky;bottom:0;background:var(--card)}
+.field{margin-bottom:15px}
+.field label{display:block;font-size:.68rem;color:var(--muted);margin-bottom:5px;text-transform:uppercase;letter-spacing:1px}
+.inp{width:100%;background:var(--card2);border:1px solid var(--brd);border-radius:var(--r2);color:var(--txt);padding:8px 11px;font-size:.84rem;font-family:'DM Sans',sans-serif;transition:border-color .15s}
+.inp:focus{outline:none;border-color:var(--accent2)}
+.inp::placeholder{color:var(--muted2)}
+select.inp option{background:var(--card2)}
+
+/* ── BUTTONS ── */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--r2);font-size:.8rem;font-weight:600;cursor:pointer;border:none;transition:all .15s;font-family:'DM Sans',sans-serif;white-space:nowrap}
+.btn-primary{background:var(--accent);color:#fff}.btn-primary:hover{background:#5b52e0}
+.btn-sec{background:var(--card2);color:var(--txt);border:1px solid var(--brd)}.btn-sec:hover{background:var(--brd)}
+.btn-danger{background:rgba(244,63,94,.12);color:var(--red);border:1px solid rgba(244,63,94,.25)}.btn-danger:hover{background:rgba(244,63,94,.22)}
+.btn-green{background:rgba(34,211,160,.12);color:var(--green);border:1px solid rgba(34,211,160,.25)}.btn-green:hover{background:rgba(34,211,160,.22)}
+.btn-amber{background:rgba(245,158,11,.12);color:var(--amber);border:1px solid rgba(245,158,11,.25)}.btn-amber:hover{background:rgba(245,158,11,.22)}
+.btn-sm{padding:5px 10px;font-size:.74rem}
+
+/* ── LOGIN ── */
+#loginScreen{position:fixed;inset:0;z-index:999;background:var(--bg);display:flex;align-items:center;justify-content:center}
+.login-box{background:var(--card);border:1px solid var(--brd2);border-radius:var(--r);padding:38px;width:min(400px,92vw);box-shadow:0 0 100px rgba(108,99,255,.12)}
+.login-logo{font-family:'Space Mono',monospace;font-size:1.5rem;font-weight:700;color:var(--accent2);text-align:center;letter-spacing:4px;margin-bottom:4px}
+.login-sub{text-align:center;font-size:.65rem;color:var(--muted);letter-spacing:4px;text-transform:uppercase;margin-bottom:30px}
+.login-error{background:rgba(244,63,94,.08);border:1px solid rgba(244,63,94,.25);color:var(--red);font-size:.76rem;padding:9px 13px;border-radius:var(--r2);margin-bottom:14px;display:none;align-items:center;gap:8px}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:22px;right:22px;z-index:9999;background:var(--card2);border:1px solid var(--brd2);border-radius:var(--r);padding:11px 16px;font-size:.81rem;display:flex;align-items:center;gap:10px;box-shadow:0 6px 28px rgba(0,0,0,.45);transform:translateY(80px);opacity:0;transition:all .3s;pointer-events:none;min-width:220px;max-width:380px}
+.toast.show{transform:translateY(0);opacity:1}
+.toast.ok i{color:var(--green)}.toast.err i{color:var(--red)}.toast.warn i{color:var(--amber)}
+
+/* ── PLAN SECTION ── */
+.plan-section{background:var(--card);border:1px solid var(--brd);border-radius:var(--r);padding:18px;margin-bottom:14px}
+.plan-hdr{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.plan-mods{display:flex;flex-wrap:wrap;gap:6px}
+.plan-mod-chip{display:inline-flex;align-items:center;gap:4px;font-size:.68rem;background:var(--card2);border:1px solid var(--brd);border-radius:var(--r2);padding:3px 8px}
+
+/* ── PAGOS ── */
+.pago-card{background:var(--card2);border:1px solid var(--brd);border-radius:var(--r2);padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.pago-tipo{font-size:.75rem;font-weight:600;text-transform:uppercase;letter-spacing:1px}
+.pago-fecha{font-size:.75rem;color:var(--muted);font-family:'Space Mono',monospace}
+
+/* ── ALERTA BLOQUEO ── */
+.bloqueo-banner{background:rgba(244,63,94,.08);border:1px solid rgba(244,63,94,.3);border-radius:var(--r);padding:12px 16px;margin-bottom:16px;display:flex;align-items:flex-start;gap:10px}
+.alerta-banner{background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:var(--r);padding:12px 16px;margin-bottom:16px;display:flex;align-items:flex-start;gap:10px}
+
+/* ── GRID UTILS ── */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+.progress-bar{width:70px;height:4px;background:var(--brd2);border-radius:99px;overflow:hidden;display:inline-block;vertical-align:middle}
+.progress-fill{height:100%;background:var(--accent2);border-radius:99px}
+.section-sep{border:none;border-top:1px solid var(--brd);margin:18px 0}
+
+/* ── TABS ── */
+.tab-nav{display:flex;gap:0;border-bottom:1px solid var(--brd);margin-bottom:18px}
+.tab-btn{padding:9px 16px;font-size:.78rem;font-weight:600;color:var(--muted);background:none;border:none;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s;font-family:'DM Sans',sans-serif}
+.tab-btn.active{color:var(--accent2);border-bottom-color:var(--accent2)}
+.tab-pane{display:none}.tab-pane.active{display:block}
+
+@media(max-width:768px){.sidebar{display:none}.g2,.g3{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<!-- ══ LOGIN ══════════════════════════════════ -->
+<div id="loginScreen">
+  <div class="login-box">
+    <div class="login-logo">CAPTA</div>
+    <div class="login-sub">Admin Console</div>
+    <div class="login-error" id="loginErr">
+      <i class="fas fa-exclamation-triangle"></i>
+      <span id="loginErrMsg"></span>
+    </div>
+    <div class="field">
+      <label>Usuario</label>
+      <input type="text" class="inp" id="adminUser" placeholder="admin" autocomplete="off">
+    </div>
+    <div class="field">
+      <label>Contraseña</label>
+      <input type="password" class="inp" id="adminPass" placeholder="••••••••"
+        onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center;padding:11px" onclick="doLogin()">
+      <i class="fas fa-terminal"></i> Acceder al panel
+    </button>
+    <div style="text-align:center;margin-top:18px;font-size:.62rem;color:var(--muted);font-family:'Space Mono',monospace">
+      CAPTA C.A. &mdash; archyss-dev
+    </div>
+  </div>
+</div>
+
+<!-- ══ APP ════════════════════════════════════ -->
+<div id="app" style="display:none;flex:1;width:100%">
+
+<aside class="sidebar">
+  <div class="sb-logo">
+    <div class="sb-logo-mark">CAPTA</div>
+    <div class="sb-logo-sub">Admin Console</div>
+  </div>
+
+  <div class="sb-section">Gestión</div>
+  <button class="sb-link active" onclick="nav('empresas',this)">
+    <i class="fas fa-building"></i> Empresas
+  </button>
+  <button class="sb-link" onclick="nav('planes',this)">
+    <i class="fas fa-layer-group"></i> Planes
+  </button>
+  <button class="sb-link" onclick="nav('modulos',this)">
+    <i class="fas fa-puzzle-piece"></i> Módulos
+  </button>
+  <button class="sb-link" id="sb-pagos" onclick="nav('pagos',this)">
+    <i class="fas fa-credit-card"></i> Pagos
+  </button>
+
+  <div class="sb-section">Acciones</div>
+  <button class="sb-link" onclick="nav('nueva',this)">
+    <i class="fas fa-plus-circle"></i> Nueva Empresa
+  </button>
+
+  <div class="sb-bottom">
+    <div class="sb-version">v2.0 &middot; CAPTA</div>
+    <button class="btn-logout" onclick="doLogout()">
+      <i class="fas fa-right-from-bracket"></i>
+    </button>
+  </div>
+</aside>
+
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-title" id="topTitle">Empresas registradas</div>
+    <div class="topbar-right">
+      <span class="admin-badge"><i class="fas fa-shield-halved"></i> SUPER ADMIN</span>
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- ── EMPRESAS ─────────────────────────── -->
+    <div class="section active" id="sec-empresas">
+      <div class="page-hdr">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:6px">
+          <div>
+            <div class="page-title">Empresas</div>
+            <div class="page-sub">Gestiona planes, módulos, pagos y accesos</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <input type="text" class="inp" placeholder="Buscar empresa..."
+              oninput="filterE(this.value)" style="width:200px;padding:7px 12px">
+            <button class="btn btn-primary btn-sm" onclick="nav('nueva',document.querySelectorAll('.sb-link')[4])">
+              <i class="fas fa-plus"></i> Nueva
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="stats-grid" id="statsGrid">
+        <div class="stat-card stat-accent"><div class="stat-num" id="st0">—</div><div class="stat-lbl">Total</div></div>
+        <div class="stat-card stat-green"><div class="stat-num" id="st1">—</div><div class="stat-lbl">Activas</div></div>
+        <div class="stat-card stat-amber"><div class="stat-num" id="st2">—</div><div class="stat-lbl">Con alertas</div></div>
+        <div class="stat-card stat-red"><div class="stat-num" id="st3">—</div><div class="stat-lbl">Bloqueadas</div></div>
+        <div class="stat-card stat-cyan"><div class="stat-num" id="st4">—</div><div class="stat-lbl">Plan Full</div></div>
+      </div>
+
+      <div class="card">
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr>
+              <th>Empresa</th>
+              <th>Estado</th>
+              <th>Plan</th>
+              <th>Pagos</th>
+              <th>Módulos</th>
+              <th style="text-align:center">Acciones</th>
+            </tr></thead>
+            <tbody id="eTbody">
+              <tr><td colspan="6" style="text-align:center;padding:40px;color:var(--muted)">
+                <i class="fas fa-spinner fa-spin" style="font-size:1.2rem;display:block;margin-bottom:8px"></i>Cargando...
+              </td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── PLANES ──────────────────────────── -->
+    <div class="section" id="sec-planes">
+      <div class="page-hdr">
+        <div class="page-title">Planes de suscripción</div>
+        <div class="page-sub">Define qué módulos del sistema incluye cada plan. Cambios se guardan automáticamente en Supabase.</div>
+      </div>
+      <div id="planesContainer"></div>
+    </div>
+
+    <!-- ── MÓDULOS ─────────────────────────── -->
+    <div class="section" id="sec-modulos">
+      <div class="page-hdr">
+        <div class="page-title">Módulos del sistema</div>
+        <div class="page-sub">Los módulos del sistema CAPTA. Estos son los mismos que aparecen en el navbar del dashboard.</div>
+      </div>
+      <div class="card">
+        <div class="mod-grid" id="catalogGrid"></div>
+      </div>
+    </div>
+
+    <!-- ── PAGOS ───────────────────────────── -->
+    <div class="section" id="sec-pagos">
+      <div class="page-hdr">
+        <div class="page-title">Control de Pagos</div>
+        <div class="page-sub">Registra y monitorea anualidades, mensualidades y pagos de desarrollo. El sistema alerta o bloquea según vencimiento.</div>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card stat-green"><div class="stat-num" id="pk0">—</div><div class="stat-lbl">Al día</div></div>
+        <div class="stat-card stat-amber"><div class="stat-num" id="pk1">—</div><div class="stat-lbl">En alerta</div></div>
+        <div class="stat-card stat-red"><div class="stat-num" id="pk2">—</div><div class="stat-lbl">Vencidos</div></div>
+        <div class="stat-card"><div class="stat-num" id="pk3" style="color:var(--muted)">—</div><div class="stat-lbl">Pendientes</div></div>
+      </div>
+
+      <div class="card" style="padding:14px 18px;margin-bottom:14px">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <select class="inp" id="fPagoEmpresa" style="width:220px" onchange="renderPagos()">
+            <option value="">Todas las empresas</option>
+          </select>
+          <select class="inp" id="fPagoTipo" style="width:180px" onchange="renderPagos()">
+            <option value="">Todos los tipos</option>
+            <option value="mensualidad">Mensualidad</option>
+            <option value="anualidad">Anualidad</option>
+            <option value="desarrollo">Desarrollo</option>
+          </select>
+          <select class="inp" id="fPagoEstado" style="width:160px" onchange="renderPagos()">
+            <option value="">Todos los estados</option>
+            <option value="al_dia">Al día</option>
+            <option value="alerta">En alerta</option>
+            <option value="vencido">Vencido</option>
+            <option value="pendiente">Pendiente</option>
+          </select>
+          <button class="btn btn-primary btn-sm" onclick="openNuevoPago()">
+            <i class="fas fa-plus"></i> Registrar pago
+          </button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr>
+              <th>Empresa</th>
+              <th>Tipo</th>
+              <th>Concepto</th>
+              <th>Monto</th>
+              <th>Fecha pago</th>
+              <th>Vencimiento</th>
+              <th>Estado</th>
+              <th>Días gracia</th>
+              <th style="text-align:center">Acciones</th>
+            </tr></thead>
+            <tbody id="pagosTbody">
+              <tr><td colspan="9" style="text-align:center;padding:40px;color:var(--muted)">
+                <i class="fas fa-spinner fa-spin" style="font-size:1.2rem;display:block;margin-bottom:8px"></i>Cargando...
+              </td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-hdr">
+          <div class="card-title"><i class="fas fa-bell" style="color:var(--amber);margin-right:6px"></i>Reglas de alerta y bloqueo</div>
+        </div>
+        <div id="reglasContainer"></div>
+      </div>
+    </div>
+
+    <!-- ── NUEVA EMPRESA ───────────────────── -->
+    <div class="section" id="sec-nueva">
+      <div class="page-hdr">
+        <div class="page-title">Nueva empresa</div>
+        <div class="page-sub">Registrar una nueva empresa en el sistema CAPTA</div>
+      </div>
+      <div class="card" style="max-width:640px">
+        <div class="field">
+          <label>Nombre *</label>
+          <input type="text" class="inp" id="n_nombre" placeholder="Ej: ACME S.A."
+            oninput="this.value=this.value.toUpperCase()">
+        </div>
+        <div class="g2">
+          <div class="field">
+            <label>Clave Dashboard *</label>
+            <input type="text" class="inp" id="n_clave" placeholder="Mín. 6 caracteres">
+          </div>
+          <div class="field">
+            <label>Clave PWA *</label>
+            <input type="text" class="inp" id="n_clavepwa" placeholder="Para promotores de campo">
+          </div>
+        </div>
+        <div class="g2">
+          <div class="field">
+            <label>Plan inicial</label>
+            <select class="inp" id="n_plan" onchange="onNuevoPlan(this.value)">
+              <option value="full" selected>Full — todos los módulos</option>
+              <option value="mid">Mid — módulos esenciales</option>
+              <option value="basic">Básico — core mínimo</option>
+              <option value="custom">Custom — personalizado</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Vencimiento (opcional)</label>
+            <input type="date" class="inp" id="n_venc">
+          </div>
+        </div>
+        <div class="field">
+          <label>Módulos activos — ajusta según plan</label>
+          <div class="mod-grid" id="n_mods" style="margin-top:8px"></div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="crearEmpresa()">
+            <i class="fas fa-plus"></i> Crear empresa
+          </button>
+          <button class="btn btn-sec" onclick="resetNueva()">
+            <i class="fas fa-undo"></i> Limpiar
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</div>
+
+<!-- ══ MODAL EDITAR EMPRESA ══════════════════ -->
+<div class="overlay" id="editOverlay">
+  <div class="modal">
+    <div class="modal-hdr">
+      <div class="modal-title">
+        <i class="fas fa-building" style="color:var(--accent2)"></i>
+        <span id="editModalTitle">Editar empresa</span>
+      </div>
+      <button class="modal-close" onclick="closeEdit()"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="e_id">
+      <div class="tab-nav">
+        <button class="tab-btn active" onclick="switchModalTab('general',this)">General</button>
+        <button class="tab-btn" onclick="switchModalTab('modulos',this)">Módulos</button>
+        <button class="tab-btn" onclick="switchModalTab('pagos_empresa',this)">Pagos</button>
+      </div>
+      <div class="tab-pane active" id="etab-general">
+        <div class="g2">
+          <div class="field" style="grid-column:1/-1">
+            <label>Nombre</label>
+            <input type="text" class="inp" id="e_nombre" oninput="this.value=this.value.toUpperCase()">
+          </div>
+          <div class="field">
+            <label>Clave Dashboard</label>
+            <input type="text" class="inp" id="e_clave">
+          </div>
+          <div class="field">
+            <label>Clave PWA</label>
+            <input type="text" class="inp" id="e_clavepwa">
+          </div>
+          <div class="field">
+            <label>Estado del sistema</label>
+            <select class="inp" id="e_estatus">
+              <option value="activa">Activa</option>
+              <option value="inactiva">Inactiva</option>
+              <option value="suspendida">Suspendida</option>
+              <option value="bloqueada">Bloqueada (pago)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Vencimiento plan</label>
+            <input type="date" class="inp" id="e_venc">
+          </div>
+          <div class="field" style="grid-column:1/-1">
+            <label>Días de gracia antes de bloquear (incumplimiento)</label>
+            <input type="number" class="inp" id="e_dias_gracia" min="0" max="90" placeholder="15" style="width:120px">
+            <div style="font-size:.7rem;color:var(--muted);margin-top:5px">
+              Al vencer cualquier pago, se muestran alertas durante X días. Pasado ese plazo, el acceso se bloquea.
+            </div>
+          </div>
+        </div>
+        <div id="e_alertas_pago" style="margin-top:8px"></div>
+      </div>
+      <div class="tab-pane" id="etab-modulos">
+        <div class="field">
+          <label>Plan</label>
+          <select class="inp" id="e_plan" onchange="onEditPlan(this.value)" style="width:200px">
+            <option value="full">Full</option>
+            <option value="mid">Mid</option>
+            <option value="basic">Básico</option>
+            <option value="custom">Custom</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Módulos activos — interruptores individuales</label>
+          <div class="mod-grid" id="e_mods" style="margin-top:10px"></div>
+        </div>
+      </div>
+      <div class="tab-pane" id="etab-pagos_empresa">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+          <button class="btn btn-primary btn-sm" onclick="openNuevoPagoEmpresa()">
+            <i class="fas fa-plus"></i> Registrar pago
+          </button>
+        </div>
+        <div id="e_pagos_list">
+          <div style="text-align:center;padding:24px;color:var(--muted)">
+            <i class="fas fa-spinner fa-spin"></i> Cargando pagos...
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-sec" onclick="closeEdit()">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveEdit()">
+        <i class="fas fa-save"></i> Guardar cambios
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL NUEVO PAGO ══════════════════════ -->
+<div class="overlay" id="pagoOverlay">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-hdr">
+      <div class="modal-title">
+        <i class="fas fa-credit-card" style="color:var(--green)"></i>
+        Registrar pago
+      </div>
+      <button class="modal-close" onclick="closePago()"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="p_id">
+      <div class="field">
+        <label>Empresa *</label>
+        <select class="inp" id="p_empresa"></select>
+      </div>
+      <div class="g2">
+        <div class="field">
+          <label>Tipo de pago *</label>
+          <select class="inp" id="p_tipo">
+            <option value="mensualidad">💳 Mensualidad</option>
+            <option value="anualidad">📅 Anualidad</option>
+            <option value="desarrollo">🛠️ Desarrollo</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Monto (USD)</label>
+          <input type="number" class="inp" id="p_monto" placeholder="0.00" step="0.01" min="0">
+        </div>
+      </div>
+      <div class="field">
+        <label>Concepto / descripción</label>
+        <input type="text" class="inp" id="p_concepto" placeholder="Ej: Mensualidad abril 2026">
+      </div>
+      <div class="g2">
+        <div class="field">
+          <label>Fecha de pago *</label>
+          <input type="date" class="inp" id="p_fecha_pago">
+        </div>
+        <div class="field">
+          <label>Fecha vencimiento *</label>
+          <input type="date" class="inp" id="p_vencimiento">
+        </div>
+      </div>
+      <div class="field">
+        <label>Estado</label>
+        <select class="inp" id="p_estado">
+          <option value="al_dia">✅ Al día</option>
+          <option value="pendiente">🕐 Pendiente</option>
+          <option value="vencido">❌ Vencido</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Notas</label>
+        <input type="text" class="inp" id="p_notas" placeholder="Opcional...">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-sec" onclick="closePago()">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarPago()">
+        <i class="fas fa-save"></i> Guardar pago
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"><i class="fas fa-check-circle"></i><span id="toastMsg"></span></div>
+
+<script>
+const SB_URL = 'https://djjylikkocemrlsjxscr.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRqanlsaWtrb2NlbXJsc2p4c2NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxNjUyNDEsImV4cCI6MjA3ODc0MTI0MX0.fnv1BKn_o-PYEAPljG0V3dt3b2Uifwn8EEzkP8Aab3M';
+const SB_H = {'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'};
+const AU = 'admincapta123', AP = 'archys123';
+
+/* ══ MÓDULOS DEL SISTEMA ══
+   Alineados exactamente con los módulos del navbar del dashboard.
+   key = nombre técnico usado en modulos_activos de la BD
+   label = nombre exacto que aparece en el navbar
+*/
+const MODS = [
+  {key:'dashboard',           label:'Dashboard',            icon:'fas fa-gauge-high'},
+  {key:'analisis_precios',    label:'Análisis de Precios',  icon:'fas fa-chart-line'},
+  {key:'caras',               label:'Caras en Anaquel',     icon:'fas fa-eye'},
+  {key:'metros_espacios',     label:'Metros de Anaquel',    icon:'fas fa-ruler-horizontal'},
+  {key:'espacios_adicionales',label:'Espacios Adicionales', icon:'fas fa-store'},
+  {key:'stock',               label:'Control de Stock',     icon:'fas fa-boxes-stacked'},
+  {key:'gps_verificacion',    label:'Seguimiento GPS',      icon:'fas fa-map-location-dot'},
+  {key:'planograma',          label:'Planogramas',          icon:'fas fa-image'},
+  {key:'promotores',          label:'Promotores',           icon:'fas fa-users'},
+  {key:'clientes',            label:'Clientes',             icon:'fas fa-store'},
+  {key:'lineas',              label:'Líneas',               icon:'fas fa-sitemap'},
+  {key:'productos',           label:'Mis Productos',        icon:'fas fa-tag'},
+  {key:'competencia',         label:'Competencia',          icon:'fas fa-chess'},
+  {key:'reportes',            label:'Reportes',             icon:'fas fa-file-chart-column'},  /* ← NUEVO */
+];
+
+/* ══ PLANES DEFAULT ══ */
+const PLANES_DEFAULT = {
+  full: {
+    label:'Full', cls:'plan-full',
+    desc:'Acceso completo a todos los módulos del sistema',
+    mods: MODS.map(m => m.key)   /* auto-incluye reportes */
+  },
+  mid: {
+    label:'Mid', cls:'plan-mid',
+    desc:'Módulos operativos y de análisis esenciales',
+    mods: ['dashboard','analisis_precios','caras','metros_espacios','stock','gps_verificacion','planograma','promotores','clientes','lineas','productos','reportes']  /* ← AGREGADO */
+  },
+  basic: {
+    label:'Básico', cls:'plan-basic',
+    desc:'Core mínimo para captura de precios',
+    mods: ['dashboard','promotores','clientes','lineas','productos']
+  },
+  custom: {
+    label:'Custom', cls:'plan-custom',
+    desc:'Módulos configurados manualmente por empresa',
+    mods: []
+  }
+};
+let PLANES = JSON.parse(JSON.stringify(PLANES_DEFAULT));
+
+/* ══ REGLAS DE PAGO ══ */
+const REGLAS_PAGO = {
+  mensualidad: { alerta_dias: 5,  bloqueo_dias: 15, label: 'Mensualidad',  color: 'var(--cyan)' },
+  anualidad:   { alerta_dias: 30, bloqueo_dias: 60, label: 'Anualidad',    color: 'var(--accent2)' },
+  desarrollo:  { alerta_dias: 7,  bloqueo_dias: 30, label: 'Desarrollo',   color: 'var(--amber)' },
+};
+
+let allE = [], filtE = [], allPagos = [], editId = null, editingPlan = null, currentPagoEmpresaId = null;
+
+/* ══ LOGIN ══ */
+function doLogin() {
+  const u = document.getElementById('adminUser').value.trim();
+  const p = document.getElementById('adminPass').value.trim();
+  if (u === AU && p === AP) {
+    sessionStorage.setItem('cadm','1');
+    document.getElementById('loginScreen').style.display = 'none';
+    const app = document.getElementById('app');
+    app.style.display = 'flex'; app.style.flexDirection = 'row'; app.style.width = '100%';
+    boot();
+  } else {
+    const e = document.getElementById('loginErr');
+    document.getElementById('loginErrMsg').textContent = 'Credenciales incorrectas';
+    e.style.display = 'flex';
+    setTimeout(() => e.style.display = 'none', 3000);
+  }
+}
+function doLogout() {
+  sessionStorage.removeItem('cadm');
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('adminUser').value = '';
+  document.getElementById('adminPass').value = '';
+}
+if (sessionStorage.getItem('cadm')) {
+  document.getElementById('loginScreen').style.display = 'none';
+  const app = document.getElementById('app');
+  app.style.display = 'flex'; app.style.flexDirection = 'row'; app.style.width = '100%';
+  setTimeout(boot, 0);
+}
+
+async function boot() {
+  await loadPlanesFromDB();
+  await Promise.all([loadE(), loadPagos()]);
+  renderPlanes();
+  renderCatalog();
+  buildModGrid('n_mods', {}, 'full');
+  renderReglasInfo();
+}
+
+/* ══ NAVEGACIÓN ══ */
+const navTitles = {
+  empresas: 'Empresas registradas',
+  planes:   'Planes de suscripción',
+  modulos:  'Módulos del sistema',
+  pagos:    'Control de pagos',
+  nueva:    'Nueva empresa'
+};
+function nav(name, btn) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.sb-link').forEach(b => b.classList.remove('active'));
+  document.getElementById('sec-'+name).classList.add('active');
+  if (btn) btn.classList.add('active');
+  document.getElementById('topTitle').textContent = navTitles[name] || '';
+}
+
+/* ══ API SUPABASE ══ */
+async function sb(path, opts = {}) {
+  const r = await fetch(SB_URL + '/rest/v1/' + path, {headers: SB_H, ...opts});
+  if (!r.ok) {
+    const e = await r.json().catch(() => ({}));
+    throw new Error(e.message || e.details || 'HTTP ' + r.status);
+  }
+  const t = await r.text();
+  return t ? JSON.parse(t) : [];
+}
+
+/* ══ PLANES DESDE DB ══ */
+async function loadPlanesFromDB() {
+  try {
+    const res = await sb('capta_planes?select=id,label,descripcion,modulos&order=id.asc');
+    if (!res || !res.length) return;
+    res.forEach(row => {
+      const key = row.id;
+      if (PLANES[key]) {
+        PLANES[key].mods = Array.isArray(row.modulos)
+          ? row.modulos
+          : JSON.parse(row.modulos || '[]');
+        PLANES[key].desc = row.descripcion || PLANES[key].desc;
+      }
+    });
+  } catch(e) {
+    console.warn('No se pudieron cargar planes desde DB:', e.message);
+  }
+}
+
+async function savePlanToDB(key) {
+  const pl = PLANES[key];
+  return sb(`capta_planes?id=eq.${key}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      modulos: pl.mods,
+      descripcion: pl.desc,
+      updated_at: new Date().toISOString()
+    })
+  });
+}
+
+/* ══ EMPRESAS ══ */
+async function loadE() {
+  try {
+    allE = await sb('empresas?select=id,nombre,clave_acceso,clave_pwa,estatus,fecha_vencimiento,modulos_activos,dias_gracia&order=nombre.asc');
+    filtE = [...allE];
+    renderStats();
+    renderTbl();
+    populatePagoEmpresaSelect();
+  } catch(e) {
+    toast('Error cargando empresas: ' + e.message, 'err');
+  }
+}
+
+function parseMods(raw) {
+  if (!raw) return {};
+  if (typeof raw === 'object' && !Array.isArray(raw)) return raw;
+  try { return JSON.parse(raw); } catch { return {}; }
+}
+
+function countMods(e) {
+  return Object.values(parseMods(e.modulos_activos)).filter(v => v === true).length;
+}
+
+function getPlan(e) {
+  const mods = parseMods(e.modulos_activos);
+  const keys = Object.keys(mods).filter(k => mods[k] === true);
+  if (keys.length === MODS.length) return 'full';
+  const midS = new Set(PLANES.mid.mods);
+  if (keys.length === PLANES.mid.mods.length && keys.every(k => midS.has(k))) return 'mid';
+  const basS = new Set(PLANES.basic.mods);
+  if (keys.length === PLANES.basic.mods.length && keys.every(k => basS.has(k))) return 'basic';
+  if (keys.length === 0) return 'basic';
+  return 'custom';
+}
+
+function getEstadoPagosEmpresa(empresaId) {
+  const pagosEmpresa = allPagos.filter(p => p.empresa_id === empresaId);
+  if (!pagosEmpresa.length) return { estado: 'sin_pagos', label: 'Sin pagos', cls: '' };
+  const hoy = new Date();
+  let hayBloqueo = false, hayAlerta = false;
+  for (const pago of pagosEmpresa) {
+    if (!pago.vencimiento) continue;
+    const venc = new Date(pago.vencimiento);
+    const diasVencido = Math.floor((hoy - venc) / 86400000);
+    const regla = REGLAS_PAGO[pago.tipo];
+    if (!regla) continue;
+    if (diasVencido > regla.bloqueo_dias) hayBloqueo = true;
+    else if (diasVencido > 0 || diasVencido > -regla.alerta_dias) hayAlerta = true;
+  }
+  if (hayBloqueo) return { estado: 'vencido', label: 'Bloqueado', cls: 'pago-vencido' };
+  if (hayAlerta)  return { estado: 'alerta',  label: 'Alerta',    cls: 'pago-alerta' };
+  return { estado: 'al_dia', label: 'Al día', cls: 'pago-ok' };
+}
+
+function renderStats() {
+  let conAlerta = 0, bloqueadas = 0;
+  allE.forEach(e => {
+    const ep = getEstadoPagosEmpresa(e.id);
+    if (ep.estado === 'vencido') bloqueadas++;
+    else if (ep.estado === 'alerta') conAlerta++;
+  });
+  document.getElementById('st0').textContent = allE.length;
+  document.getElementById('st1').textContent = allE.filter(e => e.estatus === 'activa').length;
+  document.getElementById('st2').textContent = conAlerta;
+  document.getElementById('st3').textContent = bloqueadas;
+  document.getElementById('st4').textContent = allE.filter(e => getPlan(e) === 'full').length;
+  const dot = document.getElementById('sb-pagos').querySelector('.alert-dot');
+  if (conAlerta + bloqueadas > 0) {
+    if (!dot) {
+      const d = document.createElement('span');
+      d.className = 'alert-dot';
+      document.getElementById('sb-pagos').appendChild(d);
+    }
+  } else if (dot) dot.remove();
+}
+
+function dateBadge(d) {
+  if (!d) return '<span style="color:var(--muted)">Sin límite</span>';
+  const dt = new Date(d);
+  const hoy = new Date();
+  const diff = Math.ceil((dt - hoy) / (1000*60*60*24));
+  const s = dt.toLocaleDateString('es-ES', {day:'2-digit',month:'short',year:'numeric'});
+  if (diff < 0) return `<span style="color:var(--red);font-size:.75rem">${s} <i class="fas fa-times-circle"></i></span>`;
+  if (diff <= 7) return `<span style="color:var(--amber);font-size:.75rem">${s} (${diff}d)</span>`;
+  return `<span style="font-size:.75rem">${s}</span>`;
+}
+
+function statusDot(e) {
+  const m = {
+    activa:    ['dot-green', 'Activa'],
+    inactiva:  ['dot-red',   'Inactiva'],
+    suspendida:['dot-amber', 'Suspendida'],
+    bloqueada: ['dot-red',   'Bloqueada']
+  };
+  const [c,l] = m[e.estatus] || ['dot-amber', e.estatus];
+  return `<span class="dot ${c}" style="margin-right:5px"></span>${l}`;
+}
+
+function renderTbl() {
+  const tb = document.getElementById('eTbody');
+  if (!filtE.length) {
+    tb.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:36px;color:var(--muted)">Sin resultados</td></tr>';
+    return;
+  }
+  tb.innerHTML = filtE.map(e => {
+    const pl = getPlan(e);
+    const cnt = countMods(e);
+    const pct = Math.round(cnt / MODS.length * 100);
+    const ep = getEstadoPagosEmpresa(e.id);
+    const pagoBadge = ep.cls
+      ? `<span class="pago-badge ${ep.cls}">${ep.label}</span>`
+      : `<span style="color:var(--muted);font-size:.72rem">—</span>`;
+    return `<tr>
+      <td>
+        <div style="font-weight:600;font-size:.84rem">${e.nombre}</div>
+        <div style="font-size:.65rem;color:var(--muted);font-family:'Space Mono',monospace">${e.id.slice(0,8)}…</div>
+      </td>
+      <td style="font-size:.81rem">${statusDot(e)}</td>
+      <td>
+        <span class="plan-badge ${PLANES[pl]?.cls || ''}" style="cursor:pointer" onclick="openEdit('${e.id}')" title="Click para editar">
+          ${PLANES[pl]?.label || pl}
+        </span>
+      </td>
+      <td>${pagoBadge}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+          <span style="font-size:.68rem;color:var(--muted);font-family:'Space Mono',monospace">${cnt}/${MODS.length}</span>
+        </div>
+      </td>
+      <td style="text-align:center">
+        <div style="display:inline-flex;gap:5px">
+          <button class="btn btn-sec btn-sm" onclick="openEdit('${e.id}')" title="Editar empresa">
+            <i class="fas fa-pen"></i>
+          </button>
+          <button class="btn btn-green btn-sm" onclick="quickPlan('${e.id}','full')" title="Aplicar plan Full">
+            <i class="fas fa-crown"></i>
+          </button>
+          <button class="btn btn-danger btn-sm" onclick="toggleStatus('${e.id}')" title="Activar/Desactivar">
+            <i class="fas fa-power-off"></i>
+          </button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function filterE(q) {
+  const t = q.toLowerCase();
+  filtE = allE.filter(e => e.nombre.toLowerCase().includes(t) || e.estatus.toLowerCase().includes(t));
+  renderTbl();
+}
+
+async function quickPlan(id, pk) {
+  const m = {};
+  PLANES[pk].mods.forEach(k => m[k] = true);
+  try {
+    await sb('empresas?id=eq.' + id, {method:'PATCH', body:JSON.stringify({modulos_activos: m})});
+    toast('Plan ' + PLANES[pk].label + ' aplicado', 'ok');
+    await loadE();
+  } catch(e) { toast('Error: ' + e.message, 'err'); }
+}
+
+async function toggleStatus(id) {
+  const e = allE.find(x => x.id === id);
+  if (!e) return;
+  const n = e.estatus === 'activa' ? 'inactiva' : 'activa';
+  if (!confirm((n === 'activa' ? 'Activar' : 'Desactivar') + ' ' + e.nombre + '?')) return;
+  try {
+    await sb('empresas?id=eq.' + id, {method:'PATCH', body:JSON.stringify({estatus: n})});
+    toast('Empresa ' + n, 'ok');
+    await loadE();
+  } catch(e) { toast('Error: ' + e.message, 'err'); }
+}
+
+/* ══ MOD GRID ══ */
+function buildModGrid(containerId, activeMods, planKey) {
+  const c = document.getElementById(containerId);
+  if (!c) return;
+  const effective = (planKey && planKey !== 'custom')
+    ? Object.fromEntries(PLANES[planKey].mods.map(k => [k, true]))
+    : activeMods;
+  c.innerHTML = '';
+  MODS.forEach(m => {
+    const on = effective[m.key] === true;
+    const d = document.createElement('div');
+    d.className = 'mod-item' + (on ? ' on' : '');
+    d.id = 'MI_' + containerId + '_' + m.key;
+    d.innerHTML = `
+      <div>
+        <div class="mod-name"><i class="${m.icon}" style="color:var(--accent2);margin-right:5px;font-size:.72rem"></i>${m.label}</div>
+        <div class="mod-key">${m.key}</div>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" ${on ? 'checked' : ''} onchange="onToggle('${containerId}','${m.key}',this.checked)">
+        <span class="toggle-sl"></span>
+      </label>`;
+    c.appendChild(d);
+  });
+}
+
+function onToggle(cid, key, checked) {
+  const item = document.getElementById('MI_' + cid + '_' + key);
+  if (checked) item.classList.add('on');
+  else item.classList.remove('on');
+  if (cid === 'e_mods') document.getElementById('e_plan').value = 'custom';
+}
+
+function getModsFromGrid(cid) {
+  const m = {};
+  MODS.forEach(mod => {
+    const cb = document.querySelector(`#MI_${cid}_${mod.key} input[type=checkbox]`);
+    if (cb) m[mod.key] = cb.checked;
+  });
+  return m;
+}
+
+/* ══ MODAL EDITAR EMPRESA ══ */
+function switchModalTab(name, btn) {
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('etab-' + name).classList.add('active');
+  if (btn) btn.classList.add('active');
+  if (name === 'pagos_empresa') renderPagosEmpresa(editId);
+}
+
+function openEdit(id) {
+  const e = allE.find(x => x.id === id);
+  if (!e) return;
+  editId = id;
+  document.getElementById('editModalTitle').textContent = e.nombre;
+  document.getElementById('e_id').value = e.id;
+  document.getElementById('e_nombre').value = e.nombre;
+  document.getElementById('e_clave').value = e.clave_acceso || '';
+  document.getElementById('e_clavepwa').value = e.clave_pwa || '';
+  document.getElementById('e_estatus').value = e.estatus || 'activa';
+  document.getElementById('e_venc').value = e.fecha_vencimiento ? e.fecha_vencimiento.split('T')[0] : '';
+  document.getElementById('e_dias_gracia').value = e.dias_gracia ?? 15;
+  const pl = getPlan(e);
+  document.getElementById('e_plan').value = pl;
+  buildModGrid('e_mods', parseMods(e.modulos_activos));
+  renderAlertasPagoModal(id);
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('etab-general').classList.add('active');
+  document.querySelectorAll('.tab-btn')[0].classList.add('active');
+  document.getElementById('editOverlay').classList.add('open');
+}
+
+function renderAlertasPagoModal(empresaId) {
+  const cont = document.getElementById('e_alertas_pago');
+  const pagosEmp = allPagos.filter(p => p.empresa_id === empresaId);
+  if (!pagosEmp.length) { cont.innerHTML = ''; return; }
+  const hoy = new Date();
+  const alertas = [];
+  pagosEmp.forEach(pago => {
+    if (!pago.vencimiento) return;
+    const venc = new Date(pago.vencimiento);
+    const diasVencido = Math.floor((hoy - venc) / 86400000);
+    const regla = REGLAS_PAGO[pago.tipo];
+    if (!regla) return;
+    if (diasVencido > regla.bloqueo_dias) {
+      alertas.push({tipo:'bloqueo', msg:`${regla.label} vencida hace ${diasVencido} días — ACCESO BLOQUEADO`, pago});
+    } else if (diasVencido > 0) {
+      alertas.push({tipo:'alerta', msg:`${regla.label} vencida hace ${diasVencido} días (${regla.bloqueo_dias - diasVencido}d hasta bloqueo)`, pago});
+    } else if (diasVencido > -regla.alerta_dias) {
+      alertas.push({tipo:'info', msg:`${regla.label} vence en ${Math.abs(diasVencido)} días`, pago});
+    }
+  });
+  if (!alertas.length) { cont.innerHTML = ''; return; }
+  cont.innerHTML = alertas.map(a => {
+    const cls = a.tipo === 'bloqueo' ? 'bloqueo-banner' : 'alerta-banner';
+    const ico = a.tipo === 'bloqueo' ? 'fas fa-lock' : 'fas fa-exclamation-triangle';
+    const color = a.tipo === 'bloqueo' ? 'var(--red)' : 'var(--amber)';
+    return `<div class="${cls}">
+      <i class="${ico}" style="color:${color};margin-top:2px;flex-shrink:0"></i>
+      <span style="font-size:.78rem">${a.msg}</span>
+    </div>`;
+  }).join('');
+}
+
+function closeEdit() {
+  document.getElementById('editOverlay').classList.remove('open');
+  editId = null;
+}
+
+function onEditPlan(pk) {
+  if (pk !== 'custom') buildModGrid('e_mods', {}, pk);
+}
+
+async function saveEdit() {
+  const id = document.getElementById('e_id').value;
+  const nombre = document.getElementById('e_nombre').value.trim().toUpperCase();
+  const clave = document.getElementById('e_clave').value.trim();
+  const clavepwa = document.getElementById('e_clavepwa').value.trim();
+  const estatus = document.getElementById('e_estatus').value;
+  const venc = document.getElementById('e_venc').value || null;
+  const dias_gracia = parseInt(document.getElementById('e_dias_gracia').value) || 15;
+  const mods = getModsFromGrid('e_mods');
+  if (!nombre || !clave) { toast('Nombre y clave son requeridos', 'err'); return; }
+  try {
+    await sb('empresas?id=eq.' + id, {
+      method: 'PATCH',
+      body: JSON.stringify({nombre, clave_acceso: clave, clave_pwa: clavepwa, estatus, fecha_vencimiento: venc, modulos_activos: mods, dias_gracia})
+    });
+    toast('Empresa actualizada correctamente', 'ok');
+    closeEdit();
+    await loadE();
+  } catch(e) { toast('Error: ' + e.message, 'err'); }
+}
+
+document.getElementById('editOverlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeEdit();
+});
+
+/* ══ NUEVA EMPRESA ══ */
+function onNuevoPlan(pk) {
+  if (pk !== 'custom') buildModGrid('n_mods', {}, pk);
+}
+
+function resetNueva() {
+  ['n_nombre','n_clave','n_clavepwa','n_venc'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('n_plan').value = 'full';
+  buildModGrid('n_mods', {}, 'full');
+}
+
+async function crearEmpresa() {
+  const nombre = document.getElementById('n_nombre').value.trim().toUpperCase();
+  const clave = document.getElementById('n_clave').value.trim();
+  const clavepwa = document.getElementById('n_clavepwa').value.trim();
+  const venc = document.getElementById('n_venc').value || null;
+  const mods = getModsFromGrid('n_mods');
+  if (!nombre) { toast('El nombre es requerido', 'err'); return; }
+  if (!clave || clave.length < 6) { toast('Clave mínimo 6 caracteres', 'err'); return; }
+  if (!clavepwa) { toast('La clave PWA es requerida', 'err'); return; }
+  try {
+    await sb('empresas', {
+      method: 'POST',
+      body: JSON.stringify({nombre, clave_acceso: clave, clave_pwa: clavepwa, estatus: 'activa', fecha_vencimiento: venc, modulos_activos: mods, dias_gracia: 15})
+    });
+    toast('Empresa creada exitosamente', 'ok');
+    resetNueva();
+    await loadE();
+    nav('empresas', document.querySelector('.sb-link'));
+  } catch(e) { toast('Error: ' + e.message, 'err'); }
+}
+
+/* ══ PLANES ══ */
+function renderPlanes() {
+  const c = document.getElementById('planesContainer');
+  c.innerHTML = '';
+  Object.entries(PLANES).forEach(([key, pl]) => {
+    const isCustom = key === 'custom';
+    const isEditing = editingPlan === key;
+    const div = document.createElement('div');
+    div.className = 'plan-section';
+    div.id = 'plan-sec-' + key;
+    if (isEditing) {
+      div.innerHTML = `
+        <div class="plan-hdr">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span class="plan-badge ${pl.cls}">${pl.label}</span>
+            <span style="font-size:.73rem;color:var(--muted)">Editando módulos del plan</span>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-green btn-sm" id="btn-save-plan-${key}" onclick="savePlan('${key}')">
+              <i class="fas fa-save"></i> Guardar
+            </button>
+            <button class="btn btn-sec btn-sm" onclick="cancelEditPlan()">
+              <i class="fas fa-times"></i> Cancelar
+            </button>
+          </div>
+        </div>
+        <div class="field" style="margin-bottom:14px">
+          <label>Descripción del plan</label>
+          <input type="text" class="inp" id="plan-desc-${key}" value="${pl.desc}" style="max-width:500px">
+        </div>
+        <label style="font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:8px">
+          Módulos incluidos — activa o desactiva con los interruptores
+        </label>
+        <div class="mod-grid" id="plan-mods-grid-${key}"></div>
+        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-sec btn-sm" onclick="selectAllPlan('${key}')">
+            <i class="fas fa-check-double"></i> Todos
+          </button>
+          <button class="btn btn-sec btn-sm" onclick="deselectAllPlan('${key}')">
+            <i class="fas fa-square"></i> Ninguno
+          </button>
+          <button class="btn btn-sec btn-sm" onclick="resetPlanDefault('${key}')">
+            <i class="fas fa-undo"></i> Restaurar default
+          </button>
+        </div>`;
+    } else {
+      const chips = isCustom
+        ? '<p style="color:var(--muted);font-size:.78rem;font-style:italic">Los módulos se configuran manualmente por empresa en el modal de edición.</p>'
+        : pl.mods.map(k => {
+            const m = MODS.find(x => x.key === k);
+            return m ? `<span class="plan-mod-chip"><i class="${m.icon}" style="color:var(--accent2);font-size:.62rem"></i>${m.label}</span>` : '';
+          }).join('');
+      const cnt = isCustom ? 'Variable' : pl.mods.length + ' módulos';
+      div.innerHTML = `
+        <div class="plan-hdr">
+          <div>
+            <span class="plan-badge ${pl.cls}">${pl.label}</span>
+            <div style="font-size:.74rem;color:var(--muted);margin-top:6px">${pl.desc}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:.78rem;color:var(--accent2);font-family:'Space Mono',monospace;font-weight:700">${cnt}</span>
+            ${!isCustom ? `<button class="btn btn-sec btn-sm" onclick="startEditPlan('${key}')">
+              <i class="fas fa-pen"></i> Editar
+            </button>` : ''}
+          </div>
+        </div>
+        <div class="plan-mods">${chips}</div>`;
+    }
+    c.appendChild(div);
+    if (isEditing && !isCustom) buildPlanModGrid(key, pl.mods);
+  });
+}
+
+function buildPlanModGrid(planKey, activeMods) {
+  const c = document.getElementById('plan-mods-grid-' + planKey);
+  if (!c) return;
+  c.innerHTML = '';
+  MODS.forEach(m => {
+    const on = activeMods.includes(m.key);
+    const d = document.createElement('div');
+    d.className = 'mod-item' + (on ? ' on' : '');
+    d.id = 'PMI_' + planKey + '_' + m.key;
+    d.innerHTML = `
+      <div>
+        <div class="mod-name"><i class="${m.icon}" style="color:var(--accent2);margin-right:5px;font-size:.72rem"></i>${m.label}</div>
+        <div class="mod-key">${m.key}</div>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" ${on ? 'checked' : ''} onchange="onPlanModToggle('${planKey}','${m.key}',this.checked)">
+        <span class="toggle-sl"></span>
+      </label>`;
+    c.appendChild(d);
+  });
+}
+
+function onPlanModToggle(planKey, modKey, checked) {
+  const item = document.getElementById('PMI_' + planKey + '_' + modKey);
+  if (checked) item.classList.add('on');
+  else item.classList.remove('on');
+}
+
+function startEditPlan(key) {
+  editingPlan = key;
+  renderPlanes();
+  setTimeout(() => {
+    document.getElementById('plan-sec-' + key)?.scrollIntoView({behavior:'smooth', block:'start'});
+  }, 50);
+}
+
+function cancelEditPlan() {
+  editingPlan = null;
+  renderPlanes();
+}
+
+async function savePlan(key) {
+  const btn = document.getElementById('btn-save-plan-' + key);
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando…'; }
+  const mods = [];
+  MODS.forEach(m => {
+    const cb = document.querySelector(`#PMI_${key}_${m.key} input[type=checkbox]`);
+    if (cb && cb.checked) mods.push(m.key);
+  });
+  const desc = document.getElementById('plan-desc-' + key)?.value.trim() || PLANES[key].desc;
+  if (mods.length === 0) {
+    toast('El plan debe tener al menos 1 módulo', 'err');
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> Guardar'; }
+    return;
+  }
+  PLANES[key].mods = mods;
+  PLANES[key].desc = desc;
+  try {
+    await savePlanToDB(key);
+    toast(`Plan ${PLANES[key].label} guardado — ${mods.length} módulos`, 'ok');
+    editingPlan = null;
+    renderPlanes();
+  } catch(e) {
+    toast('Error al guardar en BD: ' + e.message, 'err');
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save"></i> Guardar'; }
+  }
+}
+
+function selectAllPlan(key) {
+  MODS.forEach(m => {
+    const cb = document.querySelector(`#PMI_${key}_${m.key} input[type=checkbox]`);
+    const item = document.getElementById('PMI_' + key + '_' + m.key);
+    if (cb) { cb.checked = true; item?.classList.add('on'); }
+  });
+}
+
+function deselectAllPlan(key) {
+  MODS.forEach(m => {
+    const cb = document.querySelector(`#PMI_${key}_${m.key} input[type=checkbox]`);
+    const item = document.getElementById('PMI_' + key + '_' + m.key);
+    if (cb) { cb.checked = false; item?.classList.remove('on'); }
+  });
+}
+
+async function resetPlanDefault(key) {
+  if (!confirm('¿Restaurar los módulos por defecto para el plan ' + PLANES[key].label + '?')) return;
+  PLANES[key].mods = [...PLANES_DEFAULT[key].mods];
+  PLANES[key].desc = PLANES_DEFAULT[key].desc;
+  buildPlanModGrid(key, PLANES[key].mods);
+  try {
+    await savePlanToDB(key);
+    toast('Plan restaurado y guardado', 'ok');
+  } catch(e) {
+    toast('Restaurado (error al sincronizar BD: ' + e.message + ')', 'err');
+  }
+}
+
+/* ══ CATÁLOGO ══ */
+function renderCatalog() {
+  const c = document.getElementById('catalogGrid');
+  c.innerHTML = MODS.map(m => `
+    <div class="mod-item on" style="cursor:default">
+      <div>
+        <div class="mod-name">
+          <i class="${m.icon}" style="color:var(--accent2);margin-right:5px;font-size:.72rem"></i>${m.label}
+        </div>
+        <div class="mod-key">${m.key}</div>
+      </div>
+      <i class="fas fa-check" style="color:var(--green);font-size:.72rem"></i>
+    </div>`).join('');
+}
+
+/* ══ PAGOS ══ */
+async function loadPagos() {
+  try {
+    allPagos = await sb('capta_pagos?select=*&order=vencimiento.asc');
+    renderPagosKPIs();
+  } catch(e) {
+    allPagos = [];
+    console.warn('capta_pagos no disponible:', e.message);
+  }
+}
+
+function calcEstadoPago(pago) {
+  if (pago.estado === 'pendiente') return { label:'Pendiente', cls:'pago-pendiente' };
+  if (!pago.vencimiento) return { label:'Al día', cls:'pago-ok' };
+  const hoy = new Date();
+  const venc = new Date(pago.vencimiento);
+  const diasVencido = Math.floor((hoy - venc) / 86400000);
+  const regla = REGLAS_PAGO[pago.tipo];
+  if (!regla) return { label: pago.estado || '—', cls: '' };
+  if (diasVencido > regla.bloqueo_dias) return { label: 'Vencido (bloq.)', cls: 'pago-vencido' };
+  if (diasVencido > 0)                   return { label: `Vencido (${diasVencido}d)`, cls: 'pago-alerta' };
+  if (diasVencido > -regla.alerta_dias)  return { label: 'Por vencer', cls: 'pago-alerta' };
+  return { label: 'Al día', cls: 'pago-ok' };
+}
+
+function renderPagosKPIs() {
+  let alDia = 0, enAlerta = 0, vencidos = 0, pendientes = 0;
+  allPagos.forEach(p => {
+    const est = calcEstadoPago(p);
+    if (est.cls === 'pago-ok') alDia++;
+    else if (est.cls === 'pago-alerta') enAlerta++;
+    else if (est.cls === 'pago-vencido') vencidos++;
+    else pendientes++;
+  });
+  document.getElementById('pk0').textContent = alDia;
+  document.getElementById('pk1').textContent = enAlerta;
+  document.getElementById('pk2').textContent = vencidos;
+  document.getElementById('pk3').textContent = pendientes;
+}
+
+function renderPagos() {
+  const fEmpresa = document.getElementById('fPagoEmpresa').value;
+  const fTipo = document.getElementById('fPagoTipo').value;
+  const fEstado = document.getElementById('fPagoEstado').value;
+  let filtered = allPagos.filter(p => {
+    if (fEmpresa && p.empresa_id !== fEmpresa) return false;
+    if (fTipo && p.tipo !== fTipo) return false;
+    if (fEstado) {
+      const est = calcEstadoPago(p);
+      const estadoMap = { 'al_dia':'pago-ok', 'alerta':'pago-alerta', 'vencido':'pago-vencido', 'pendiente':'pago-pendiente' };
+      if (est.cls !== estadoMap[fEstado]) return false;
+    }
+    return true;
+  });
+  const tb = document.getElementById('pagosTbody');
+  if (!filtered.length) {
+    tb.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--muted)">Sin pagos para los filtros seleccionados</td></tr>';
+    return;
+  }
+  const tipoIcon = { mensualidad:'💳', anualidad:'📅', desarrollo:'🛠️' };
+  tb.innerHTML = filtered.map(p => {
+    const empresa = allE.find(e => e.id === p.empresa_id);
+    const est = calcEstadoPago(p);
+    const regla = REGLAS_PAGO[p.tipo];
+    const diasVencido = p.vencimiento ? Math.floor((new Date() - new Date(p.vencimiento)) / 86400000) : null;
+    const diasGraciaRestantes = (regla && diasVencido > 0) ? Math.max(0, regla.bloqueo_dias - diasVencido) : null;
+    return `<tr>
+      <td style="font-weight:600;font-size:.82rem">${empresa?.nombre || p.empresa_id?.slice(0,8)}</td>
+      <td>${tipoIcon[p.tipo] || ''} <span style="font-size:.78rem;text-transform:capitalize">${p.tipo || '—'}</span></td>
+      <td style="font-size:.78rem;color:var(--muted)">${p.concepto || '—'}</td>
+      <td style="font-family:'Space Mono',monospace;font-size:.78rem">${p.monto ? '$' + parseFloat(p.monto).toFixed(2) : '—'}</td>
+      <td style="font-size:.75rem">${p.fecha_pago ? new Date(p.fecha_pago).toLocaleDateString('es-ES') : '—'}</td>
+      <td>${dateBadge(p.vencimiento)}</td>
+      <td><span class="pago-badge ${est.cls}">${est.label}</span></td>
+      <td style="font-size:.75rem;text-align:center">
+        ${diasGraciaRestantes !== null
+          ? `<span style="color:${diasGraciaRestantes <= 5 ? 'var(--red)' : 'var(--amber)'}">${diasGraciaRestantes}d</span>`
+          : '—'}
+      </td>
+      <td style="text-align:center">
+        <div style="display:inline-flex;gap:5px">
+          <button class="btn btn-sec btn-sm" onclick="editPago('${p.id}')"><i class="fas fa-pen"></i></button>
+          <button class="btn btn-danger btn-sm" onclick="deletePago('${p.id}')"><i class="fas fa-trash"></i></button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function populatePagoEmpresaSelect() {
+  const sel = document.getElementById('fPagoEmpresa');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Todas las empresas</option>';
+  allE.forEach(e => {
+    const o = document.createElement('option');
+    o.value = e.id; o.textContent = e.nombre;
+    sel.appendChild(o);
+  });
+  if (cur) sel.value = cur;
+  renderPagos();
+}
+
+function renderPagosEmpresa(empresaId) {
+  const cont = document.getElementById('e_pagos_list');
+  const pagosEmp = allPagos.filter(p => p.empresa_id === empresaId);
+  if (!pagosEmp.length) {
+    cont.innerHTML = `<div style="text-align:center;padding:24px;color:var(--muted)">
+      <i class="fas fa-receipt" style="font-size:1.3rem;display:block;margin-bottom:8px;opacity:.3"></i>
+      Sin pagos registrados para esta empresa
+    </div>`;
+    return;
+  }
+  const tipoIcon = { mensualidad:'💳', anualidad:'📅', desarrollo:'🛠️' };
+  cont.innerHTML = pagosEmp.map(p => {
+    const est = calcEstadoPago(p);
+    return `<div class="pago-card">
+      <div>
+        <div class="pago-tipo">${tipoIcon[p.tipo] || ''} ${p.tipo}</div>
+        <div style="font-size:.78rem;color:var(--muted);margin-top:3px">${p.concepto || '—'}</div>
+      </div>
+      <div style="text-align:right">
+        <div><span class="pago-badge ${est.cls}">${est.label}</span></div>
+        <div class="pago-fecha" style="margin-top:4px">Vence: ${p.vencimiento ? new Date(p.vencimiento).toLocaleDateString('es-ES') : '—'}</div>
+        ${p.monto ? `<div style="font-size:.75rem;color:var(--green);font-family:'Space Mono',monospace;margin-top:2px">$${parseFloat(p.monto).toFixed(2)}</div>` : ''}
+      </div>
+      <div style="display:flex;gap:5px">
+        <button class="btn btn-sec btn-sm" onclick="editPago('${p.id}')"><i class="fas fa-pen"></i></button>
+        <button class="btn btn-danger btn-sm" onclick="deletePago('${p.id}')"><i class="fas fa-trash"></i></button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openNuevoPago(empresaId = null) {
+  document.getElementById('p_id').value = '';
+  document.getElementById('p_empresa').innerHTML = allE.map(e =>
+    `<option value="${e.id}" ${e.id === (empresaId || '') ? 'selected' : ''}>${e.nombre}</option>`
+  ).join('');
+  if (empresaId) document.getElementById('p_empresa').value = empresaId;
+  document.getElementById('p_tipo').value = 'mensualidad';
+  document.getElementById('p_monto').value = '';
+  document.getElementById('p_concepto').value = '';
+  document.getElementById('p_estado').value = 'al_dia';
+  document.getElementById('p_notas').value = '';
+  document.getElementById('p_fecha_pago').value = new Date().toISOString().split('T')[0];
+  const v = new Date(); v.setMonth(v.getMonth() + 1);
+  document.getElementById('p_vencimiento').value = v.toISOString().split('T')[0];
+  document.getElementById('pagoOverlay').classList.add('open');
+}
+
+function openNuevoPagoEmpresa() { openNuevoPago(editId); }
+
+function editPago(id) {
+  const p = allPagos.find(x => x.id === id);
+  if (!p) return;
+  document.getElementById('p_id').value = p.id;
+  document.getElementById('p_empresa').innerHTML = allE.map(e =>
+    `<option value="${e.id}" ${e.id === p.empresa_id ? 'selected' : ''}>${e.nombre}</option>`
+  ).join('');
+  document.getElementById('p_tipo').value = p.tipo || 'mensualidad';
+  document.getElementById('p_monto').value = p.monto || '';
+  document.getElementById('p_concepto').value = p.concepto || '';
+  document.getElementById('p_estado').value = p.estado || 'al_dia';
+  document.getElementById('p_notas').value = p.notas || '';
+  document.getElementById('p_fecha_pago').value = p.fecha_pago ? p.fecha_pago.split('T')[0] : '';
+  document.getElementById('p_vencimiento').value = p.vencimiento ? p.vencimiento.split('T')[0] : '';
+  document.getElementById('pagoOverlay').classList.add('open');
+}
+
+function closePago() { document.getElementById('pagoOverlay').classList.remove('open'); }
+
+async function guardarPago() {
+  const id = document.getElementById('p_id').value;
+  const empresa_id = document.getElementById('p_empresa').value;
+  const tipo = document.getElementById('p_tipo').value;
+  const monto = parseFloat(document.getElementById('p_monto').value) || null;
+  const concepto = document.getElementById('p_concepto').value.trim();
+  const estado = document.getElementById('p_estado').value;
+  const notas = document.getElementById('p_notas').value.trim();
+  const fecha_pago = document.getElementById('p_fecha_pago').value || null;
+  const vencimiento = document.getElementById('p_vencimiento').value || null;
+  if (!empresa_id || !tipo || !vencimiento) { toast('Empresa, tipo y vencimiento son requeridos', 'err'); return; }
+  const payload = { empresa_id, tipo, monto, concepto, estado, notas, fecha_pago, vencimiento };
+  try {
+    if (id) {
+      await sb('capta_pagos?id=eq.' + id, {method:'PATCH', body: JSON.stringify(payload)});
+      toast('Pago actualizado', 'ok');
+    } else {
+      await sb('capta_pagos', {method:'POST', body: JSON.stringify(payload)});
+      toast('Pago registrado', 'ok');
+    }
+    closePago();
+    await loadPagos();
+    renderPagos();
+    renderPagosKPIs();
+    renderStats();
+    if (editId) renderPagosEmpresa(editId);
+  } catch(e) { toast('Error: ' + e.message, 'err'); }
+}
+
+async function deletePago(id) {
+  if (!confirm('¿Eliminar este registro de pago?')) return;
+  try {
+    await sb('capta_pagos?id=eq.' + id, {method:'DELETE'});
+    toast('Pago eliminado', 'ok');
+    await loadPagos();
+    renderPagos();
+    renderPagosKPIs();
+    renderStats();
+    if (editId) renderPagosEmpresa(editId);
+  } catch(e) { toast('Error: ' + e.message, 'err'); }
+}
+
+document.getElementById('pagoOverlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closePago();
+});
+
+document.getElementById('p_tipo').addEventListener('change', function() {
+  const v = new Date();
+  if (this.value === 'mensualidad') v.setMonth(v.getMonth() + 1);
+  else if (this.value === 'anualidad') v.setFullYear(v.getFullYear() + 1);
+  else v.setMonth(v.getMonth() + 3);
+  document.getElementById('p_vencimiento').value = v.toISOString().split('T')[0];
+});
+
+/* ══ REGLAS INFO ══ */
+function renderReglasInfo() {
+  const cont = document.getElementById('reglasContainer');
+  cont.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px">
+      ${Object.entries(REGLAS_PAGO).map(([tipo, regla]) => `
+        <div style="background:var(--card2);border:1px solid var(--brd);border-radius:var(--r2);padding:14px 16px">
+          <div style="font-size:.78rem;font-weight:700;text-transform:capitalize;margin-bottom:10px;color:${regla.color}">
+            ${tipo === 'mensualidad' ? '💳' : tipo === 'anualidad' ? '📅' : '🛠️'} ${regla.label}
+          </div>
+          <div style="display:flex;flex-direction:column;gap:7px">
+            <div style="display:flex;align-items:center;justify-content:space-between;font-size:.75rem">
+              <span style="color:var(--muted)"><i class="fas fa-bell" style="color:var(--amber);margin-right:4px"></i>Alerta a partir de</span>
+              <span style="font-family:'Space Mono',monospace;color:var(--amber)">+${regla.alerta_dias}d vencida</span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;font-size:.75rem">
+              <span style="color:var(--muted)"><i class="fas fa-lock" style="color:var(--red);margin-right:4px"></i>Bloqueo a partir de</span>
+              <span style="font-family:'Space Mono',monospace;color:var(--red)">+${regla.bloqueo_dias}d vencida</span>
+            </div>
+          </div>
+        </div>`).join('')}
+    </div>
+    <div style="margin-top:14px;font-size:.74rem;color:var(--muted);line-height:1.6">
+      <i class="fas fa-info-circle" style="color:var(--accent2);margin-right:4px"></i>
+      Cuando un pago vence, el login del dashboard muestra una <strong style="color:var(--amber)">alerta visible</strong> durante el período de gracia.
+      Una vez superado el período de bloqueo, el acceso queda <strong style="color:var(--red)">completamente restringido</strong>.
+      <br><br>
+      <strong>El navbar del dashboard consulta el estado de pagos al iniciar</strong> y aplica la restricción correspondiente de forma automática.
+    </div>`;
+}
+
+/* ══ TOAST ══ */
+let toastT = null;
+function toast(msg, type = 'ok') {
+  const t = document.getElementById('toast');
+  const i = t.querySelector('i');
+  document.getElementById('toastMsg').textContent = msg;
+  t.className = 'toast show ' + (type === 'err' ? 'err' : type === 'warn' ? 'warn' : 'ok');
+  i.className = type === 'err' ? 'fas fa-exclamation-circle' : type === 'warn' ? 'fas fa-exclamation-triangle' : 'fas fa-check-circle';
+  if (toastT) clearTimeout(toastT);
+  toastT = setTimeout(() => t.classList.remove('show'), 3500);
+}
+</script>
+</body>
+</html>

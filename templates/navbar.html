@@ -1,0 +1,638 @@
+{# CAPTA — navbar.html universal v4 — con sistema de alertas de cuenta #}
+<script>
+(function(){var t=localStorage.getItem('sp-theme'),s=window.matchMedia('(prefers-color-scheme:dark)').matches;if(t==='dark'||((!t)&&s))document.documentElement.classList.add('dark');})();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="{{ url_for('static', filename='sparking-theme.css') }}">
+<script src="{{ url_for('static', filename='capta-utils.js') }}"></script>
+<style>
+/* ── Dropdown Análisis ── */
+.sp-nav-dropdown-wrap{position:relative}
+.sp-nav-dropdown-wrap.open .sp-nav-dropdown{opacity:1;pointer-events:auto;transform:translateY(0)}
+.sp-nav-dropdown{position:absolute;top:calc(100% + 2px);left:0;min-width:210px;background:var(--card);border:1px solid var(--brd);border-radius:var(--r2);box-shadow:var(--sh3);padding:6px;opacity:0;pointer-events:none;transform:translateY(-6px);transition:all .16s;z-index:500}
+.sp-nav-dropdown a{display:flex;align-items:center;gap:9px;padding:9px 12px;border-radius:var(--r1);font-size:.82rem;font-weight:600;color:var(--txt2);text-decoration:none;transition:background .12s,color .12s}
+.sp-nav-dropdown a:hover,.sp-nav-dropdown a.active{background:var(--accent-soft);color:var(--accent)}
+.sp-nav-dropdown a i{width:16px;text-align:center;color:var(--accent);opacity:.8}
+.sp-nav-dropdown-sep{height:1px;background:var(--brd);margin:4px 6px}
+.sp-nav-link.has-dropdown::after{content:'▾';font-size:.55rem;margin-left:3px;opacity:.6}
+.sp-nav-links.loading-mods > *:not([data-nav-core]) {
+  visibility: hidden;
+}
+
+/* ── Banner de alerta de cuenta ── */
+#captaAlertaBanner {
+  display: none;
+  background: linear-gradient(90deg, rgba(245,158,11,.13), rgba(245,158,11,.06));
+  border-bottom: 1px solid rgba(245,158,11,.35);
+  padding: 7px 20px;
+  font-size: .78rem;
+  font-weight: 500;
+  color: #f59e0b;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  position: relative;
+  z-index: 100;
+}
+#captaAlertaBanner i { flex-shrink: 0; }
+#captaAlertaBanner .banner-contact {
+  margin-left: auto;
+  font-size: .72rem;
+  color: var(--muted, #94a3b8);
+  white-space: nowrap;
+}
+
+/* ── Modal bloqueo ── */
+#captaModalBloqueo {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0,0,0,.88);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  align-items: center;
+  justify-content: center;
+}
+.capta-bloqueo-card {
+  background: #0f172a;
+  border: 1px solid rgba(244,63,94,.45);
+  border-radius: 20px;
+  padding: 44px 36px;
+  max-width: 440px;
+  width: 92%;
+  text-align: center;
+  box-shadow: 0 0 80px rgba(244,63,94,.2), 0 24px 60px rgba(0,0,0,.5);
+  animation: bloqueoIn .3s cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes bloqueoIn {
+  from { opacity:0; transform: scale(.92) translateY(12px); }
+  to   { opacity:1; transform: scale(1)  translateY(0); }
+}
+.capta-bloqueo-icon {
+  width: 72px; height: 72px;
+  background: rgba(244,63,94,.15);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 24px;
+  border: 1px solid rgba(244,63,94,.3);
+}
+.capta-bloqueo-icon i { font-size: 1.8rem; color: #f43f5e; }
+.capta-bloqueo-titulo {
+  font-size: 1.15rem; font-weight: 700; color: #fff; margin-bottom: 10px;
+  font-family: 'Syne', sans-serif;
+}
+.capta-bloqueo-msg {
+  font-size: .86rem; color: #94a3b8; line-height: 1.75; margin-bottom: 28px;
+}
+.capta-bloqueo-msg strong { color: #f43f5e; }
+.capta-bloqueo-contacto {
+  background: rgba(99,102,241,.1);
+  border: 1px solid rgba(99,102,241,.25);
+  border-radius: 12px;
+  padding: 14px 18px;
+  margin-bottom: 24px;
+  font-size: .78rem;
+  color: #a5b4fc;
+  text-align: left;
+  line-height: 1.5;
+}
+.capta-bloqueo-contacto i { margin-right: 8px; }
+.capta-bloqueo-btn {
+  background: #f43f5e;
+  border: none;
+  color: #fff;
+  padding: 13px 28px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: .86rem;
+  font-weight: 700;
+  width: 100%;
+  font-family: 'DM Sans', sans-serif;
+  transition: background .15s, transform .1s;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.capta-bloqueo-btn:hover { background: #e11d48; transform: translateY(-1px); }
+.capta-bloqueo-btn:active { transform: translateY(0); }
+
+/* ── Modal suspendida (amber) ── */
+.capta-bloqueo-card.suspendida {
+  border-color: rgba(245,158,11,.45);
+  box-shadow: 0 0 80px rgba(245,158,11,.15), 0 24px 60px rgba(0,0,0,.5);
+}
+.capta-bloqueo-card.suspendida .capta-bloqueo-icon {
+  background: rgba(245,158,11,.15);
+  border-color: rgba(245,158,11,.3);
+}
+.capta-bloqueo-card.suspendida .capta-bloqueo-icon i { color: #f59e0b; }
+.capta-bloqueo-card.suspendida .capta-bloqueo-msg strong { color: #f59e0b; }
+.capta-bloqueo-card.suspendida .capta-bloqueo-btn { background: #d97706; }
+.capta-bloqueo-card.suspendida .capta-bloqueo-btn:hover { background: #b45309; }
+</style>
+
+<nav class="sp-nav" id="mainNav">
+  <div class="sp-nav-inner">
+    <a href="/dashboard" class="sp-logo">
+      <div class="sp-logo-icon"><i class="fas fa-bolt"></i></div>
+      <div><div class="sp-logo-name">CAPTA</div><div class="sp-logo-co" id="navEmpresa">—</div></div>
+    </a>
+
+    <div class="sp-nav-links" id="navLinks">
+      <a href="/dashboard" class="sp-nav-link" data-nav><i class="fas fa-home"></i> Dashboard</a>
+
+      <!-- Dropdown ANÁLISIS -->
+      <div class="sp-nav-dropdown-wrap" id="analisisDropdownWrap">
+        <span class="sp-nav-link has-dropdown" id="analisisNavBtn"
+          onclick="toggleAnalisisDropdown(event)"
+          style="cursor:pointer;user-select:none">
+          <i class="fas fa-chart-pie"></i> Análisis
+        </span>
+        <div class="sp-nav-dropdown" id="analisisDropdown">
+          <a href="/analisis" data-nav>
+            <i class="fas fa-dollar-sign"></i> Precios
+          </a>
+          <a href="/caras" data-nav>
+            <i class="fas fa-eye"></i> Caras de Anaquel
+          </a>
+          <a href="/metros_espacios" data-nav>
+            <i class="fas fa-ruler-combined"></i> Metros y Espacios
+          </a>
+          <a href="/espacios_adicionales" data-nav>
+            <i class="fas fa-store"></i> Espacios Adicionales
+          </a>
+        </div>
+      </div>
+      <a href="/reportes" class="sp-nav-link" data-nav><i class="fas fa-file-chart-column"></i> Reportes</a>
+
+      <a href="/clientes"    class="sp-nav-link" data-nav><i class="fas fa-store"></i> Clientes</a>
+      <a href="/promotores"  class="sp-nav-link" data-nav><i class="fas fa-user-tie"></i> Promotores</a>
+      <span class="sp-nav-sep"></span>
+      <a href="/lineas"      class="sp-nav-link" data-nav><i class="fas fa-layer-group"></i> Líneas</a>
+      <a href="/productos"   class="sp-nav-link" data-nav><i class="fas fa-box-open"></i> Productos</a>
+      <a href="/competencia" class="sp-nav-link" data-nav><i class="fas fa-tag"></i> Competencia</a>
+      <a href="/stock"       class="sp-nav-link" data-nav><i class="fas fa-boxes"></i> Stock</a>
+      <a href="/planograma"  class="sp-nav-link" data-nav><i class="fas fa-image"></i> Planograma</a>
+      <a href="/gps"         class="sp-nav-link" data-nav><i class="fas fa-map-marked-alt"></i> GPS</a>
+    </div>
+
+    <div class="sp-nav-more" id="navMore" style="display:none">
+      <button class="sp-more-btn" id="navMoreBtn">
+        Más <i class="fas fa-chevron-down" id="navMoreIco" style="font-size:.55rem;transition:transform .18s"></i>
+      </button>
+      <div class="sp-dropdown" id="navDropdown"></div>
+    </div>
+
+    <div class="sp-linea-wrap" id="lineaWrap">
+      <span class="sp-linea-label"><i class="fas fa-layer-group" style="margin-right:3px"></i>Línea</span>
+      <select class="sp-linea-sel" id="navLineaSel" onchange="onLineaChange(this.value)">
+        <option value="">Todas</option>
+      </select>
+    </div>
+    <div class="sp-nav-actions">
+      <button class="sp-icon-btn" onclick="toggleTheme()" title="Cambiar tema">
+        <i class="fas fa-moon" id="icoMoon"></i>
+        <i class="fas fa-sun"  id="icoSun" style="display:none"></i>
+      </button>
+      <button class="sp-icon-btn sp-hamburger" onclick="openDrawer()" style="display:none">
+        <i class="fas fa-bars"></i>
+      </button>
+      <a href="#" onclick="captaLogout(event)" class="sp-icon-btn sp-danger" title="Cerrar sesión">
+        <i class="fas fa-sign-out-alt"></i>
+      </a>
+    </div>
+  </div>
+</nav>
+
+<!-- ══ BANNER DE ALERTA DE CUENTA ══ -->
+<div id="captaAlertaBanner">
+  <i class="fas fa-exclamation-triangle"></i>
+  <span id="captaAlertaMsg"></span>
+  <span class="banner-contact">
+    <i class="fas fa-headset" style="margin-right:4px"></i>Contacta al administrador para regularizar
+  </span>
+</div>
+
+<!-- ══ MODAL BLOQUEO / SUSPENSIÓN ══ -->
+<div id="captaModalBloqueo">
+  <div class="capta-bloqueo-card" id="captaBloqueoCard">
+    <div class="capta-bloqueo-icon">
+      <i id="captaBloqueoIco" class="fas fa-lock"></i>
+    </div>
+    <div class="capta-bloqueo-titulo" id="captaModalTitulo">Acceso restringido</div>
+    <div class="capta-bloqueo-msg" id="captaModalMsg"></div>
+    <div class="capta-bloqueo-contacto">
+      <i class="fas fa-headset"></i>
+      Comunícate con la administración de <strong>CAPTA</strong> para regularizar
+      tu cuenta y reactivar el servicio.
+    </div>
+    <button class="capta-bloqueo-btn" onclick="captaLogout(event)">
+      <i class="fas fa-right-from-bracket"></i> Cerrar sesión
+    </button>
+  </div>
+</div>
+
+<!-- DRAWER MOBILE -->
+<div class="sp-drawer" id="drawer">
+  <div class="sp-drawer-overlay" onclick="closeDrawer()"></div>
+  <div class="sp-drawer-panel">
+    <div class="sp-logo" style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--brd)">
+      <div class="sp-logo-icon"><i class="fas fa-bolt"></i></div>
+      <div><div class="sp-logo-name">CAPTA</div><div class="sp-logo-co" id="drawerEmpresa">—</div></div>
+    </div>
+    <div style="margin-bottom:10px">
+      <div class="sp-label" style="margin-bottom:5px"><i class="fas fa-layer-group"></i> Filtrar por línea</div>
+      <select class="sp-select" id="drawerLineaSel" onchange="onLineaChange(this.value);closeDrawer()">
+        <option value="">Todas las líneas</option>
+      </select>
+    </div>
+    <div class="sp-drawer-sep"></div>
+    <a href="/dashboard"        class="sp-drawer-link"><i class="fas fa-home"></i> Dashboard</a>
+
+    <!-- Análisis grupo -->
+    <div style="padding:8px 12px 4px;font-size:.68rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em">Análisis</div>
+    <a href="/analisis"         class="sp-drawer-link" style="padding-left:22px"><i class="fas fa-dollar-sign"></i> Precios (USD/kg)</a>
+    <a href="/caras"            class="sp-drawer-link" style="padding-left:22px"><i class="fas fa-eye"></i> Caras de Anaquel</a>
+    <a href="/metros_espacios"  class="sp-drawer-link" style="padding-left:22px"><i class="fas fa-ruler-combined"></i> Metros y Espacios</a>
+    <a href="/espacios_adicionales" class="sp-drawer-link" style="padding-left:22px"><i class="fas fa-store"></i> Espacios Adicionales</a>
+    <div class="sp-drawer-sep"></div>
+    <a href="/stock"       class="sp-drawer-link"><i class="fas fa-boxes"></i> Stock</a>
+    <a href="/gps"         class="sp-drawer-link"><i class="fas fa-map-marked-alt"></i> GPS</a>
+    <a href="/clientes"    class="sp-drawer-link"><i class="fas fa-store"></i> Clientes</a>
+    <a href="/promotores"  class="sp-drawer-link"><i class="fas fa-user-tie"></i> Promotores</a>
+    <div class="sp-drawer-sep"></div>
+    <a href="/lineas"      class="sp-drawer-link"><i class="fas fa-layer-group"></i> Líneas</a>
+    <a href="/productos"   class="sp-drawer-link"><i class="fas fa-box-open"></i> Productos</a>
+    <a href="/competencia" class="sp-drawer-link"><i class="fas fa-tag"></i> Competencia</a>
+    <a href="/planograma"  class="sp-drawer-link"><i class="fas fa-image"></i> Planograma</a>
+    <a href="/reportes" class="sp-drawer-link"><i class="fas fa-file-chart-column"></i> Reportes</a>
+    <div class="sp-drawer-sep"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px">
+      <span style="font-size:.8rem;color:var(--muted)">Tema</span>
+      <button class="sp-btn sp-btn-sec sp-btn-sm" onclick="toggleTheme()">
+        <i class="fas fa-moon" id="drawerMoon"></i>
+        <i class="fas fa-sun"  id="drawerSun" style="display:none"></i>
+        <span id="drawerThemeLbl">—</span>
+      </button>
+    </div>
+    <a href="#" onclick="captaLogout(event)" class="sp-drawer-link" style="color:var(--red);margin-top:4px">
+      <i class="fas fa-sign-out-alt" style="color:var(--red)"></i> Cerrar sesión
+    </a>
+  </div>
+</div>
+
+<script>
+/* ── CAPTA NAV v4 — con sistema de alertas de cuenta ── */
+
+window.db = null;
+let _captaLineas = [];
+let _captaLinea  = localStorage.getItem('sp-linea') || '';
+
+window._captaDbReady = false;
+
+window.captaReady = function(fn) {
+  if (window._captaDbReady) { fn(); }
+  else { window.addEventListener('capta:db-ready', fn, { once: true }); }
+};
+
+/* ── Mapa módulos → selectores CSS ── */
+const _MOD_LINKS = {
+  analisis_precios:     ['[href="/analisis"]'],
+  caras:                ['[href="/caras"]'],
+  metros_espacios:      ['[href="/metros_espacios"]'],
+  clientes:             ['[href="/clientes"]'],
+  promotores:           ['[href="/promotores"]'],
+  lineas:               ['[href="/lineas"]'],
+  productos:            ['[href="/productos"]'],
+  competencia:          ['[href="/competencia"]'],
+  stock:                ['[href="/stock"]'],
+  planograma:           ['[href="/planograma"]'],
+  gps:                  ['[href="/gps"]'],
+  gps_verificacion:     ['[href="/gps"]'],
+  espacios_adicionales: ['[href="/espacios_adicionales"]'],
+  reportes:             ['[href="/reportes"]'],
+};
+
+/* ══════════════════════════════════════════════
+   VERIFICACIÓN DE ESTADO DE CUENTA
+══════════════════════════════════════════════ */
+async function _checkCuentaStatus() {
+  try {
+    const res = await fetch('/api/empresa/status');
+    if (!res.ok) return;
+    const s = await res.json();
+
+    const modal    = document.getElementById('captaModalBloqueo');
+    const card     = document.getElementById('captaBloqueoCard');
+    const ico      = document.getElementById('captaBloqueoIco');
+    const titulo   = document.getElementById('captaModalTitulo');
+    const msg      = document.getElementById('captaModalMsg');
+    const banner   = document.getElementById('captaAlertaBanner');
+    const bannerMsg= document.getElementById('captaAlertaMsg');
+
+    if (s.estatus === 'bloqueada') {
+      card.classList.remove('suspendida');
+      ico.className = 'fas fa-lock';
+      titulo.textContent = 'Cuenta bloqueada';
+      msg.innerHTML = 'Tu empresa ha sido <strong>bloqueada por incumplimiento de pago</strong>.<br><br>'
+        + 'No es posible acceder al sistema hasta regularizar el saldo pendiente con la administración.';
+      modal.style.display = 'flex';
+      return;
+    }
+
+    if (s.estatus === 'suspendida') {
+      card.classList.add('suspendida');
+      ico.className = 'fas fa-pause-circle';
+      titulo.textContent = 'Cuenta suspendida';
+      msg.innerHTML = 'Tu cuenta está temporalmente <strong>suspendida</strong>.<br><br>'
+        + 'Contacta al administrador para conocer los detalles y reactivar el servicio.';
+      modal.style.display = 'flex';
+      return;
+    }
+
+    const alertas = [];
+
+    if (s.dias_para_vencer !== null && s.dias_para_vencer !== undefined) {
+      if (s.dias_para_vencer < 0) {
+        const dias = Math.abs(s.dias_para_vencer);
+        alertas.push(
+          `⚠ Tu plan venció hace ${dias} día${dias === 1 ? '' : 's'} — `
+          + `período de gracia: ${s.dias_gracia} días`
+        );
+      } else if (s.dias_para_vencer === 0) {
+        alertas.push('⚠ Tu plan vence hoy');
+      } else if (s.dias_para_vencer <= 10) {
+        alertas.push(
+          `⚠ Tu plan vence en ${s.dias_para_vencer} día${s.dias_para_vencer === 1 ? '' : 's'}`
+        );
+      }
+    }
+
+    if (Array.isArray(s.alertas_pagos)) {
+      s.alertas_pagos.forEach(p => {
+        if (p.nivel === 'vencido') {
+          alertas.push(
+            `Pago "${p.concepto}" vencido hace ${p.dias_vencido} día${p.dias_vencido === 1 ? '' : 's'}`
+          );
+        } else if (p.nivel === 'proximo') {
+          const d = p.dias_para_vencer;
+          alertas.push(
+            d === 0
+              ? `Pago "${p.concepto}" vence hoy`
+              : `Pago "${p.concepto}" vence en ${d} día${d === 1 ? '' : 's'}`
+          );
+        }
+      });
+    }
+
+    if (alertas.length > 0) {
+      bannerMsg.textContent = alertas.join('  ·  ');
+      banner.style.display = 'flex';
+    }
+
+  } catch(e) {
+    console.warn('CAPTA: no se pudo verificar estado de cuenta', e);
+  }
+}
+
+async function _applyModules(empresaId) {
+  const navLinks = document.getElementById('navLinks');
+  if (navLinks) navLinks.classList.add('loading-mods');
+  try {
+    const res = await fetch(
+      `${window._SUPA_URL}/rest/v1/empresas?id=eq.${empresaId}&select=modulos_activos`,
+      { headers: { 'apikey': window._SUPA_KEY, 'Authorization': 'Bearer ' + window._SUPA_KEY } }
+    );
+    if (!res.ok) return;
+    const data = await res.json();
+    const raw  = data[0]?.modulos_activos;
+    if (!raw || Object.keys(raw).length === 0) return;
+    const mods = typeof raw === 'string' ? JSON.parse(raw) : raw;
+
+    Object.entries(_MOD_LINKS).forEach(([key, selectors]) => {
+      const allowed = mods[key] === true;
+      selectors.forEach(sel => {
+        document.querySelectorAll(sel).forEach(el => {
+          el.style.display      = allowed ? '' : 'none';
+          el.dataset.modBlocked = allowed ? '' : '1';
+          const navParent = el.parentElement?.closest('#navLinks > div, #navLinks > a');
+          if (navParent && !allowed) {
+            const siblings   = navParent.querySelectorAll('a[href]');
+            const allBlocked = Array.from(siblings).every(s => s.dataset.modBlocked === '1');
+            if (allBlocked) { navParent.style.display = 'none'; navParent.dataset.modBlocked = '1'; }
+          }
+        });
+      });
+    });
+
+    const analisisKeys = ['analisis_precios','caras','metros_espacios'];
+    const anyAnalisis  = analisisKeys.some(k => mods[k] === true);
+    const wrap = document.getElementById('analisisDropdownWrap');
+    if (wrap) wrap.style.display = anyAnalisis ? '' : 'none';
+
+    window._captaModulos = mods;
+    if (navLinks) navLinks.classList.remove('loading-mods');
+    _checkNavOverflow();
+
+  } catch(e) {
+    console.warn('CAPTA: no se pudieron cargar módulos', e);
+    if (document.getElementById('navLinks'))
+      document.getElementById('navLinks').classList.remove('loading-mods');
+  }
+}
+
+async function _initSupabase() {
+  try {
+    const res = await fetch('/api/config');
+    if (!res.ok) { window.location.href = '/'; return; }
+    const cfg = await res.json();
+    window._SUPA_URL = cfg.supabase_url;
+    window._SUPA_KEY = cfg.supabase_key;
+    window.db = supabase.createClient(cfg.supabase_url, cfg.supabase_key);
+    await _loadLineas();
+
+    const eid = localStorage.getItem('empresa_id');
+    if (eid) await _applyModules(eid);
+
+    window._captaDbReady = true;
+    window.dispatchEvent(new Event('capta:db-ready'));
+
+    await _checkCuentaStatus();
+
+  } catch(e) {
+    console.error('CAPTA: error inicializando Supabase', e);
+    window.location.href = '/';
+  }
+}
+
+window.toggleAnalisisDropdown = function(e) {
+  e.stopPropagation();
+  document.getElementById('analisisDropdownWrap').classList.toggle('open');
+};
+document.addEventListener('click', function(e) {
+  const wrap = document.getElementById('analisisDropdownWrap');
+  if (wrap && !wrap.contains(e.target)) wrap.classList.remove('open');
+});
+
+function syncTheme() {
+  const d = document.documentElement.classList.contains('dark');
+  const s = (id, show) => { const e = document.getElementById(id); if (e) e.style.display = show ? 'inline' : 'none'; };
+  s('icoMoon', d); s('icoSun', !d); s('drawerMoon', d); s('drawerSun', !d);
+  const l = document.getElementById('drawerThemeLbl'); if (l) l.textContent = d ? 'Oscuro' : 'Claro';
+}
+window.toggleTheme = function() {
+  document.documentElement.classList.toggle('dark');
+  localStorage.setItem('sp-theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+  syncTheme();
+};
+syncTheme();
+
+
+(function() {
+  const cached = localStorage.getItem('empresa_nombre');
+  ['navEmpresa', 'drawerEmpresa'].forEach(id => {
+    const e = document.getElementById(id);
+    if (e) e.textContent = cached || '…';
+  });
+
+  fetch('/api/dashboard/config')
+    .then(r => r.ok ? r.json() : null)
+    .then(cfg => {
+      if (!cfg) return;
+      if (cfg.empresa_nombre) localStorage.setItem('empresa_nombre', cfg.empresa_nombre);
+      if (cfg.empresa_id)     localStorage.setItem('empresa_id',     cfg.empresa_id);
+      const nombre = cfg.empresa_nombre || cached || 'Sistema';
+      ['navEmpresa', 'drawerEmpresa'].forEach(id => {
+        const e = document.getElementById(id);
+        if (e) e.textContent = nombre;
+      });
+    })
+    .catch(() => {});
+})();
+
+(function() {
+  const path = window.location.pathname;
+  document.querySelectorAll('[data-nav]').forEach(a => {
+    const href = a.getAttribute('href');
+    if (href && path.startsWith(href) && href !== '/') a.classList.add('active');
+  });
+  const analisisPages = ['/analisis', '/caras', '/metros_espacios'];
+  if (analisisPages.some(p => path.startsWith(p)))
+    document.getElementById('analisisNavBtn')?.classList.add('active');
+})();
+
+window.onLineaChange = function(val) {
+  _captaLinea = val;
+  localStorage.setItem('sp-linea', val);
+  ['navLineaSel', 'drawerLineaSel'].forEach(id => {
+    const e = document.getElementById(id); if (e && e.value !== val) e.value = val;
+  });
+  if (typeof window.onLineaChanged === 'function') window.onLineaChanged(val);
+};
+
+async function _loadLineas() {
+  const eid = localStorage.getItem('empresa_id'); if (!eid) return;
+  try {
+    const r = await fetch(
+      `${window._SUPA_URL}/rest/v1/web_lineas?activa=eq.true&empresa_id=eq.${eid}&select=id,nombre&order=nombre`,
+      { headers: { 'apikey': window._SUPA_KEY, 'Authorization': 'Bearer ' + window._SUPA_KEY } }
+    );
+    _captaLineas = await r.json();
+    ['navLineaSel', 'drawerLineaSel'].forEach(sid => {
+      const sel = document.getElementById(sid); if (!sel) return;
+      sel.innerHTML = '<option value="">Todas las líneas</option>';
+      _captaLineas.forEach(l => sel.innerHTML += `<option value="${l.id}">${l.nombre}</option>`);
+      sel.value = _captaLinea || '';
+    });
+  } catch(e) { console.warn('Nav líneas:', e); }
+}
+
+
+window.fmtProd = function(item) {
+  if (!item) return '—';
+  const name = item.presentation || '—';
+  if (!item.gramaje) return name;
+  const g = item.gramaje % 1 === 0 ? parseInt(item.gramaje) : item.gramaje;
+  return `${name} <span style="font-size:.8em;opacity:.6;font-weight:500">${g}${item.unidad || ''}</span>`;
+};
+window.fmtProdTxt = function(item) {
+  if (!item) return '—';
+  const name = item.presentation || '—';
+  if (!item.gramaje) return name;
+  const g = item.gramaje % 1 === 0 ? parseInt(item.gramaje) : item.gramaje;
+  return `${name} ${g}${item.unidad || ''}`;
+};
+
+window.captaToast = function(msg, type = 'info') {
+  const t = document.createElement('div');
+  const c = { success: 'var(--green)', error: 'var(--red)', warn: 'var(--amber)', info: 'var(--accent)' };
+  t.style.cssText = `position:fixed;bottom:24px;right:24px;z-index:9999;background:${c[type]||c.info};color:#fff;padding:11px 18px;border-radius:10px;font-size:.83rem;font-weight:600;box-shadow:0 4px 20px rgba(0,0,0,.22);animation:fadeIn .2s ease`;
+  t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 3200);
+};
+
+window.captaLightbox = function(src) {
+  const lb = document.createElement('div');
+  lb.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.9);display:flex;align-items:center;justify-content:center;cursor:zoom-out';
+  lb.innerHTML = `<img src="${src}" style="max-width:94vw;max-height:94vh;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,.6)">`;
+  lb.onclick = () => lb.remove(); document.body.appendChild(lb);
+};
+
+function _checkNavOverflow() {
+  const nav  = document.getElementById('navLinks');
+  const more = document.getElementById('navMore'); if (!nav || !more) return;
+  const dd   = document.getElementById('navDropdown'); dd.innerHTML = '';
+  Array.from(nav.children).forEach(el => {
+    const blocked = el.dataset.modBlocked === '1';
+    if (!blocked) el.style.display = '';
+  });
+  let overflow = false;
+  Array.from(nav.children).forEach(el => {
+    if (nav.scrollWidth > nav.offsetWidth + 4 || overflow) {
+      overflow = true;
+      if (el.classList.contains('sp-nav-link') || el.tagName === 'A') {
+        const cl = el.cloneNode(true); dd.appendChild(cl); el.style.display = 'none';
+      }
+    }
+  });
+  more.style.display = dd.children.length ? 'flex' : 'none';
+}
+const _moreBtn = document.getElementById('navMoreBtn');
+if (_moreBtn) _moreBtn.onclick = () => {
+  const dd  = document.getElementById('navDropdown');
+  const ico = document.getElementById('navMoreIco');
+  dd.classList.toggle('open');
+  ico.style.transform = dd.classList.contains('open') ? 'rotate(180deg)' : '';
+};
+document.addEventListener('click', e => {
+  const dd = document.getElementById('navDropdown');
+  if (dd && !dd.closest('.sp-nav-more')?.contains(e.target)) dd.classList.remove('open');
+});
+window.openDrawer  = function() { document.getElementById('drawer').classList.add('open'); };
+window.closeDrawer = function() { document.getElementById('drawer').classList.remove('open'); };
+document.getElementById('drawer')?.addEventListener('click', e => { if (e.target.id === 'drawer') closeDrawer(); });
+
+function _updateHamburger() {
+  const nav = document.getElementById('navLinks');
+  const ham = document.querySelector('.sp-hamburger');
+  if (!nav || !ham) return; ham.style.display = nav.offsetWidth < 200 ? '' : 'none';
+}
+
+window.addEventListener('load', () => {
+  _initSupabase();
+  _checkNavOverflow();
+  _updateHamburger();
+});
+window.addEventListener('resize', () => { _checkNavOverflow(); _updateHamburger(); });
+new ResizeObserver(() => { _checkNavOverflow(); _updateHamburger(); }).observe(document.body);
+
+window.captaLogout = function(e) {
+  if (e) e.preventDefault();
+  localStorage.removeItem('empresa_id');
+  localStorage.removeItem('empresa_nombre');
+  localStorage.removeItem('sp-linea');
+  window.location.href = '/logout';
+};
+</script>

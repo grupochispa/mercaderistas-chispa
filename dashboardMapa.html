@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Geolocalización y Precios</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <style>
+        :root {
+            --color-primary: #4F46E5;
+            --azul-pastel: #A7C7E7;
+            --azul-oscuro-suave: #5A9BD4;
+        }
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.3rem 0.6rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            border-radius: 9999px; 
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+        .badge-success { background-color: #D1FAE5; color: #065F46; }
+        .badge-destructive { background-color: #FEE2E2; color: #991B1B; }
+        .badge-warning { background-color: #FEF3C7; color: #92400E; }
+        .badge-info { background-color: #E0F2FE; color: #0C4A6E; }
+        .badge-default { background-color: #F3F4F6; color: #4B5563; }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.6);
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background-color: white;
+            padding: 30px;
+            border-radius: 12px;
+            max-width: 95%;
+            max-height: 90%;
+            width: 800px;
+            overflow-y: auto;
+            position: relative;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+        }
+        .close-btn {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            color: #4B5563;
+            background-color: #ADD8E6;
+            color: black;
+            border: none;
+            padding: 5px 10px;
+        }
+        .close-btn:hover {
+            background-color: #87CEEB;
+        }
+        .table-header-sticky th {
+            position: sticky;
+            top: 0;
+            background-color: #F9FAFB;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans leading-normal tracking-normal">
+    <div class="container mx-auto p-4 sm:p-6 lg:p-8">
+        <h1 class="text-3xl font-extrabold mb-6 text-center text-gray-800">Dashboard de Visitas (Geolocalización y Precios)</h1>
+        <div class="flex justify-center space-x-4 mb-6">
+            <a href="/analisis" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-all"><i class="fas fa-chart-bar mr-2"></i>Análisis de Precio</a>
+            <a href="/clientes" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-all"><i class="fas fa-users mr-2"></i>Panel de Clientes</a>
+            <a href="/promotores" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-all"><i class="fas fa-user-tie mr-2"></i>Panel de Promotores</a>
+            <a href="/competencia" class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-all"><i class="fas fa-user-tie mr-2"></i>Panel de Productos Competencia</a>
+            <a href="/productos" 
+            class="bg-[#059669] hover:bg-[#047754] text-white font-bold py-2 px-4 rounded-lg shadow-md transition-all">
+                <i class="fas fa-user-tie mr-2"></i>Panel de Productos Chispa
+            </a>
+        </div>
+        <div class="bg-white shadow-lg rounded-xl p-6 mb-8 border border-gray-100">
+            <h2 class="text-2xl font-semibold text-gray-700 mb-4">Filtros</h2>
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
+                <div class="bg-indigo-50 p-3 rounded-lg shadow-inner text-center col-span-1">
+                    <p class="text-xl font-bold text-indigo-600" id="totalPromoters">0</p>
+                    <p class="text-sm text-indigo-400">Promotores</p>
+                </div>
+                <div class="bg-green-50 p-3 rounded-lg shadow-inner text-center col-span-1">
+                    <p class="text-xl font-bold text-green-600" id="totalRecords">0</p>
+                    <p class="text-sm text-green-400">Visitas Filtradas</p>
+                </div>
+                <div class="bg-blue-50 p-3 rounded-lg shadow-inner text-center col-span-1">
+                    <p class="text-xl font-bold text-blue-600" id="confirmationRate">0%</p>
+                    <p class="text-sm text-blue-400">Confirmación %</p>
+                </div>
+                <div class="bg-purple-50 p-3 rounded-lg shadow-inner text-center col-span-1 col-span-2">
+                    <p class="text-lg font-bold text-purple-600">Meta General: <span id="totalGoalProgress">0%</span></p>
+                    <div class="w-full bg-gray-200 rounded-full h-2.5 mt-1">
+                        <div id="totalGoalProgressBar" class="bg-purple-600 h-2.5 rounded-full" style="width: 0%"></div>
+                    </div>
+                </div>
+                <div class="col-span-2 sm:col-span-1">
+                    <label for="dateFrom" class="block text-gray-700 font-medium mb-1 text-sm">Fecha Desde:</label>
+                    <input type="date" id="dateFrom" class="w-full border rounded-lg p-2 text-gray-700 focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+                <div class="col-span-2 sm:col-span-1">
+                    <label for="dateTo" class="block text-gray-700 font-medium mb-1 text-sm">Fecha Hasta:</label>
+                    <input type="date" id="dateTo" class="w-full border rounded-lg p-2 text-gray-700 focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+                <div class="col-span-2 md:col-span-1">
+                    <label for="promoter" class="block text-gray-700 font-medium mb-1 text-sm">Promotor:</label>
+                    <select id="promoter" class="w-full border rounded-lg p-2 text-gray-700 focus:ring-indigo-500 focus:border-indigo-500">
+                        <option value="all">Todos los promotores</option>
+                    </select>
+                </div>
+                <div class="col-span-2 md:col-span-1">
+                    <label for="state" class="block text-gray-700 font-medium mb-1 text-sm">Estado:</label>
+                    <select id="state" class="w-full border rounded-lg p-2 text-gray-700 focus:ring-indigo-500 focus:border-indigo-500">
+                        <option value="all">Todos los estados</option>
+                    </select>
+                </div>
+                <div class="col-span-2 md:col-span-1">
+                    <label for="zone" class="block text-gray-700 font-medium mb-1 text-sm">Zona:</label>
+                    <select id="zone" class="w-full border rounded-lg p-2 text-gray-700 focus:ring-indigo-500 focus:border-indigo-500" disabled>
+                        <option value="all">Todas las zonas</option>
+                    </select>
+                </div>
+                <div class="col-span-2 md:col-span-1">
+                    <label for="confirmation" class="block text-gray-700 font-medium mb-1 text-sm">Confirmación:</label>
+                    <select id="confirmation" class="w-full border rounded-lg p-2 text-gray-700 focus:ring-indigo-500 focus:border-indigo-500">
+                        <option value="all">Todos</option>
+                        <option value="verificado">Confirmados</option>
+                        <option value="no_verificado">No Confirmados</option>
+                        <option value="desconocido">Cliente Desconocido</option>
+                        <option value="sin_coordenadas">Sin Coordenadas</option>
+                        <option value="cliente_sin_coordenadas">Cliente Sin Coordenadas</option>
+                    </select>
+                </div>
+                <div class="col-span-2 md:col-span-1">
+                    <label for="linea_filter" class="block text-gray-700 dark:text-gray-300 font-medium mb-1 text-sm">Línea:</label>
+                    <select id="linea_filter" class="w-full h-10 border dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg p-2 text-gray-700 focus:ring-indigo-500 focus:border-indigo-500">
+                        <option value="all">Todas las líneas</option>
+                    </select>
+                </div>
+                <div class="col-span-2 md:col-span-1">
+                    <label for="cliente_filter" class="block text-gray-700 dark:text-gray-300 font-medium mb-1 text-sm">Comercio:</label>
+                    <select id="cliente_filter" class="w-full h-10 border dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg p-2 text-gray-700 focus:ring-indigo-500 focus:border-indigo-500">
+                        <option value="all">Todos los comercios</option>
+                    </select>
+                </div>
+
+            </div>
+            <div class="flex flex-wrap gap-3 justify-end border-t pt-4">
+                <button id="exportCSV" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-all">
+                    <i class="fas fa-file-csv mr-2"></i> Exportar CSV
+                </button>
+                <button id="deleteSelected" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-all" disabled>
+                    <i class="fas fa-trash-alt mr-2"></i> Eliminar Seleccionados (<span id="selectedCount">0</span>)
+                </button>
+            </div>
+        </div>
+        <div class="bg-white shadow-lg rounded-xl p-6 mb-8 border border-gray-100">
+            <h2 class="text-2xl font-semibold text-gray-700 mb-4">Meta de Visitas Semanal</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label for="yearSelect" class="block text-gray-700 font-medium mb-1 text-sm">Año:</label>
+                    <select id="yearSelect" class="w-full border rounded-lg p-2 text-gray-700 focus:ring-indigo-500 focus:border-indigo-500">
+                        <option value="">Selecciona un año</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="weekSelect" class="block text-gray-700 font-medium mb-1 text-sm">Semana:</label>
+                    <select id="weekSelect" class="w-full border rounded-lg p-2 text-gray-700 focus:ring-indigo-500 focus:border-indigo-500" disabled>
+                        <option value="">Selecciona una semana</option>
+                    </select>
+                </div>
+            </div>
+            <div class="mb-4">
+                <label class="flex items-center text-gray-700 font-medium text-sm">
+                    <input type="checkbox" id="hideNoVisits" class="mr-2 rounded text-indigo-600">
+                    Ocultar promotores sin visitas
+                </label>
+            </div>
+            <div id="promoterProgressContainer" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            </div>
+        </div>
+        <div class="bg-white shadow-lg rounded-xl p-6 mb-8 border border-gray-100">
+            <h2 class="text-2xl font-semibold text-gray-700 mb-4">Detalle de Visitas</h2>
+            <div class="overflow-x-auto max-h-[70vh] relative">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="table-header-sticky">
+                        <tr>
+                            <th class="py-3 px-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider w-10">
+                                <input type="checkbox" id="selectAll" class="rounded text-indigo-600">
+                            </th>
+                            <th class="py-3 px-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Fecha</th>
+                            <th class="py-3 px-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Promotor</th>
+                            <th class="py-3 px-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Comercio Visita</th>
+                            <th class="py-3 px-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Estado</th>
+                            <th class="py-3 px-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Zona</th>
+                            <th class="py-3 px-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Distancia (m)</th>
+                            <th class="py-3 px-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Coord. Visita</th>
+                            <th class="py-3 px-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Coord. Cliente <i class="fas fa-map-marked-alt text-indigo-400 ml-1"></i></th>
+                            <th class="py-3 px-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Confirmación</th>
+                            <th class="py-3 px-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="priceRecordsTable" class="bg-white divide-y divide-gray-100">
+                        <tr><td colspan="11" class="text-center py-4 text-gray-500" id="loadingMessage">Cargando datos... Por favor, espere.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="flex justify-between items-center mt-4 border-t pt-4">
+                <button id="prevPage" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-4 rounded-lg transition-colors disabled:opacity-50" disabled>
+                    <i class="fas fa-chevron-left"></i> Anterior
+                </button>
+                <span id="pageInfo" class="text-gray-600 font-medium"></span>
+                <button id="nextPage" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-4 rounded-lg transition-colors disabled:opacity-50" disabled>
+                    Siguiente <i class="fas fa-chevron-right"></i>
+                </button>
+            </div>
+        </div>
+        <div class="bg-white shadow-lg rounded-xl p-6 mb-8 border border-gray-100">
+            <h2 class="text-2xl font-semibold text-gray-700 mb-4">Mapa Interactivo de Visitas (Prueba)</h2>
+            <div id="map" style="height: 400px;"></div>
+        </div>
+    </div>
+    <div id="detailsModal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn">&times;</span>
+            <h3 class="text-2xl font-bold mb-4 text-gray-800 border-b pb-2">Detalles del Registro</h3>
+            <div id="modalDetailsContent" class="space-y-3"></div>
+        </div>
+    </div>
+    <script>
+        let allRecords = []; 
+        let filteredRecords = []; 
+        let promoters = [];
+        let estados = [];
+        let zonas = [];
+        let weeklyRecords = [];
+        let currentPage = 1;
+        const recordsPerPage = 15;
+        let selectedRecords = new Set();
+        const detailsModal = document.getElementById('detailsModal');
+        const modalDetailsContent = document.getElementById('modalDetailsContent');
+        const closeBtn = document.querySelector('.close-btn');
+        const loadingMessageElement = document.getElementById('loadingMessage'); 
+        const apiCache = new Map();
+        let map;
+        closeBtn.onclick = () => detailsModal.style.display = 'none';
+        window.onclick = (event) => { if (event.target === detailsModal) detailsModal.style.display = 'none'; };
+        function getTodayMinus4Hours() {
+            const now = new Date();
+            now.setHours(now.getHours() - 4);
+            return now.toISOString().split('T')[0];
+        }
+        function getCurrentYear() {
+            return new Date().getFullYear();
+        }
+
+        function getCurrentWeek() {
+            const today = new Date();
+            const jan1 = new Date(today.getFullYear(), 0, 1);
+            const days = Math.floor((today - jan1) / (24 * 60 * 60 * 1000));
+            return Math.ceil((days + jan1.getDay() + 1) / 7);
+        }
+
+        function getWeekDateRange(week, year) {
+            const jan4 = new Date(year, 0, 4);
+            const daysToSubtract = jan4.getDay() === 0 ? 6 : jan4.getDay() - 1;
+            const mondayWeek1 = new Date(jan4);
+            mondayWeek1.setDate(jan4.getDate() - daysToSubtract);
+            const startOfWeek = new Date(mondayWeek1);
+            startOfWeek.setDate(mondayWeek1.getDate() + (week - 1) * 7);
+            const endOfWeek = new Date(startOfWeek);
+            endOfWeek.setDate(startOfWeek.getDate() + 6);
+            return {
+                start: startOfWeek.toISOString().split('T')[0],
+                end: endOfWeek.toISOString().split('T')[0]
+            };
+        }
+        function populateYears() {
+            const yearSelect = document.getElementById('yearSelect');
+            const currentYear = getCurrentYear();
+            for (let y = 2025; y <= currentYear + 5; y++) { // Desde 2025 hacia adelante, hasta 5 años futuros
+                const option = document.createElement('option');
+                option.value = y;
+                option.textContent = y;
+                if (y === currentYear) option.selected = true;
+                yearSelect.appendChild(option);
+            }
+        }
+        async function populateWeeks(year) {
+            const weekSelect = document.getElementById('weekSelect');
+            weekSelect.innerHTML = '<option value="">Selecciona una semana</option>';
+            weekSelect.disabled = !year;
+
+            if (!year) return;
+
+            try {
+                const response = await fetch(`/api/weeks_with_visits?year=${year}`);
+                const data = await response.json();
+                let weeks = data.weeks || [];
+                weeks = weeks.sort((a, b) => b - a); // Orden descendente
+                const currentWeek = getCurrentWeek();
+                const currentYear = getCurrentYear();
+
+                weeks.forEach(w => {
+                    const weekRange = getWeekDateRange(w, year);
+                    const option = document.createElement('option');
+                    option.value = w;
+                    option.textContent = `Semana ${w} (${weekRange.start} - ${weekRange.end})`;
+                    weekSelect.appendChild(option);
+                });
+
+                // Preseleccionar la semana actual si existe
+                if (year === currentYear && weeks.includes(currentWeek)) {
+                    weekSelect.value = currentWeek;
+                }
+            } catch (error) {
+                console.error('Error fetching weeks:', error);
+            }
+        }
+        function getConfirmationBadge(record) {
+            let className = 'badge-default', icon = 'fas fa-question-circle', displayText = record.verified || 'Desconocido';
+            if (record.verified && record.verified.includes('Desconocido')) {
+                className = 'badge-destructive';
+                icon = 'fas fa-search';
+                displayText = 'Cliente Desconocido';
+            } else if (record.visit_coords === null || record.visit_coords === 'N/A') {
+                className = 'badge-info';
+                icon = 'fas fa-exclamation-triangle';
+                displayText = 'Visita sin Coordenadas';
+            } else if (record.client_coords === null || record.client_coords === 'N/A') {
+                className = 'badge-warning';
+                icon = 'fas fa-map-pin';
+                displayText = 'Cliente sin Coordenadas';
+            } else if (record.distance < 150) {
+                className = 'badge-success';
+                icon = 'fas fa-check-circle';
+                displayText = 'Confirmado';
+            } else {
+                className = 'badge-destructive';
+                icon = 'fas fa-times-circle';
+                displayText = 'No Confirmado';
+            }
+            return `<span class="badge ${className}"><i class="${icon} mr-1"></i> ${displayText}</span>`;
+        }
+        function isConfirmed(record) {
+            const hasVisitCoords = record.visit_coords !== null && record.visit_coords !== 'N/A';
+            const hasClientCoords = record.client_coords !== null && record.client_coords !== 'N/A';
+            return hasVisitCoords && hasClientCoords && record.distance < 150;
+        }
+        function updateZoneFilter() {
+            const stateSelect = document.getElementById('state');
+            const zoneSelect = document.getElementById('zone');
+            const selectedStateId = stateSelect.value;
+            zoneSelect.innerHTML = '<option value="all">Todas las zonas</option>';
+            if (selectedStateId === 'all') { 
+                zoneSelect.disabled = true; 
+                filterRecords();
+                return; 
+            }
+            zoneSelect.disabled = false;
+            const zonesInState = zonas.filter(z => String(z.estado_id) === String(selectedStateId));
+            zonesInState.forEach(z => {
+                const option = document.createElement('option');
+                option.value = z.nombre; 
+                option.textContent = z.nombre;
+                zoneSelect.appendChild(option);
+            });
+            filterRecords(); 
+        }
+        async function fetchRecordsFromAPI(filters) {
+            const cacheKey = JSON.stringify(filters);
+            if (apiCache.has(cacheKey)) {
+                const cachedData = apiCache.get(cacheKey);
+                promoters = cachedData.promoters || [];
+                estados = cachedData.estados || [];
+                zonas = cachedData.zonas || [];
+                document.getElementById('totalPromoters').textContent = cachedData.total_promoters_in_db || 0;
+                return cachedData.records || [];
+            }
+            if (loadingMessageElement) loadingMessageElement.textContent = 'Cargando datos filtrados...';
+            const params = new URLSearchParams();
+            if (filters.dateFrom) params.append('date_from', filters.dateFrom);
+            if (filters.dateTo) params.append('date_to', filters.dateTo);
+            if (filters.promoterId !== 'all') params.append('promoter_id', filters.promoterId);
+            if (filters.week) params.append('week', filters.week);
+            if (filters.year) params.append('year', filters.year);
+            try {
+                const response = await fetch(`/api/records?${params.toString()}`);
+                const serverData = await response.json();
+                promoters = serverData.promoters || [];
+                estados = serverData.estados || [];
+                zonas = serverData.zonas || [];
+                document.getElementById('totalPromoters').textContent = serverData.total_promoters_in_db || 0;
+                apiCache.set(cacheKey, serverData);
+                return serverData.records || [];
+            } catch (error) {
+                if (loadingMessageElement) loadingMessageElement.innerHTML = `<span class="text-red-500 font-semibold">Error: ${error.message}</span>`;
+                return [];
+            }
+        }
+        async function fetchWeeklyRecords(week = null, year = null) {
+            const promoterId = 'all';
+            const apiFilters = { promoterId };
+            if (week && year) {
+                apiFilters.week = week;
+                apiFilters.year = year;
+            } else {
+                const today = new Date();
+                const dayOfWeek = today.getDay();
+                const startOfWeek = new Date(today);
+                startOfWeek.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+                const endOfWeek = new Date(startOfWeek);
+                endOfWeek.setDate(startOfWeek.getDate() + 6);
+                apiFilters.dateFrom = startOfWeek.toISOString().split('T')[0];
+                apiFilters.dateTo = endOfWeek.toISOString().split('T')[0];
+            }
+            return fetchRecordsFromAPI(apiFilters);
+        }
+        async function filterRecords() {
+            const dateFromValue = document.getElementById('dateFrom').value;
+            const dateToValue = document.getElementById('dateTo').value;
+            const promoterName = document.getElementById('promoter').value;
+            const stateName = document.getElementById('state').options[document.getElementById('state').selectedIndex].text;
+            const zoneName = document.getElementById('zone').options[document.getElementById('zone').selectedIndex].text;
+            const confirmationValue = document.getElementById('confirmation').value;
+            const promoter = promoters.find(p => p.promoter_name === promoterName);
+            const promoterId = (promoterName === 'all' || !promoter) ? 'all' : promoter.promoter_id; 
+            const apiFilters = { dateFrom: dateFromValue, dateTo: dateToValue, promoterId };
+            allRecords = await fetchRecordsFromAPI(apiFilters);
+            filteredRecords = allRecords.filter(record => {
+                const isPromoterMatch = promoterName === 'all' || record.promoter_name === promoterName;
+                const isStateMatch = stateName === 'Todos los estados' || record.estado === stateName;
+                const isZoneMatch = zoneName === 'Todas las zonas' || record.zona === zoneName;
+                let isConfirmationMatch = true;
+                if (confirmationValue !== 'all') {
+                    const hasVisitCoords = record.visit_coords !== null && record.visit_coords !== 'N/A';
+                    const hasClientCoords = record.client_coords !== null && record.client_coords !== 'N/A';
+                    if (confirmationValue === 'verificado' && (!hasVisitCoords || !hasClientCoords || record.distance >= 150)) {
+                        isConfirmationMatch = false;
+                    } else if (confirmationValue === 'no_verificado' && (hasVisitCoords && hasClientCoords && record.distance < 150)) {
+                        isConfirmationMatch = false;
+                    } else if (confirmationValue === 'desconocido' && (!record.verified || !record.verified.includes('Desconocido'))) {
+                        isConfirmationMatch = false;
+                    } else if (confirmationValue === 'cliente_sin_coordenadas' && hasClientCoords) {
+                        isConfirmationMatch = false;
+                    } else if (confirmationValue === 'sin_coordenadas' && hasVisitCoords) {
+                        isConfirmationMatch = false;
+                    }
+                }
+                return isPromoterMatch && isStateMatch && isZoneMatch && isConfirmationMatch;
+            });
+            currentPage = 1;
+            updateDashboard(promoterName);
+        }
+        function updateTable() {
+            const tableBody = document.getElementById('priceRecordsTable');
+            tableBody.innerHTML = '';
+            if (filteredRecords.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="11" class="text-center py-6 text-gray-500">No hay registros.</td></tr>';
+                return;
+            }
+            const startIndex = (currentPage - 1) * recordsPerPage;
+            const endIndex = startIndex + recordsPerPage;
+            filteredRecords.slice(startIndex, endIndex).forEach(record => {
+                const confirmationBadge = getConfirmationBadge(record);
+                const date = new Date(record.created_at);
+                const fecha = isNaN(date) ? 'N/A' : date.toLocaleDateString('es-ES');
+                const hora = isNaN(date) ? '' : date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+                const distanceText = record.distance > 0 ? `${record.distance} m` : 'N/A';
+                const row = document.createElement('tr');
+                row.className = "hover:bg-gray-100";
+                row.innerHTML = `
+                    <td class="py-3 px-4"><input type="checkbox" class="selectRecord" data-id="${record.id}" ${selectedRecords.has(record.id) ? 'checked' : ''}></td>
+                    <td class="py-3 px-4">${fecha} <span class="text-xs text-gray-500 block">${hora}</span></td>
+                    <td class="py-3 px-4">${record.promoter_name}</td>
+                    <td class="py-3 px-4 font-semibold">${record.trade_name}</td>
+                    <td class="py-3 px-4 text-sm">${record.estado}</td>
+                    <td class="py-3 px-4 text-sm">${record.zona}</td>
+                    <td class="py-3 px-4 text-sm">${distanceText}</td>
+                    <td class="py-3 px-4 text-sm">${record.visit_coords}</td>
+                    <td class="py-3 px-4 text-blue-600 text-sm">${record.client_coords}</td>
+                    <td class="py-3 px-4">${confirmationBadge}</td>
+                    <td class="py-3 px-4 space-x-2 whitespace-nowrap">
+                        <button class="view-details-btn text-indigo-500 hover:text-indigo-700 transition-colors" title="Ver Detalles" data-id="${record.id}">
+                            <i class="fas fa-eye text-lg"></i>
+                        </button>
+                        <button class="edit-btn text-blue-500 hover:text-blue-700 transition-colors" title="Editar Registro" data-id="${record.id}">
+                            <i class="fas fa-edit text-lg"></i>
+                        </button>
+                        <button class="delete-btn text-red-500 hover:text-red-700 transition-colors" title="Eliminar Registro" data-id="${record.id}">
+                            <i class="fas fa-trash-alt text-lg"></i>
+                        </button>
+                    </td>
+                `;
+                tableBody.appendChild(row);
+            });
+            document.querySelectorAll('.selectRecord').forEach(cb => cb.addEventListener('change', updateSelected));
+            document.querySelectorAll('.view-details-btn').forEach(btn => btn.addEventListener('click', e => {
+                const record = filteredRecords.find(r => r.id == e.currentTarget.dataset.id);
+                if (record) showDetails(record);
+            }));
+            document.querySelectorAll('.delete-btn').forEach(btn => btn.addEventListener('click', e => {
+                if (confirm(`¿Eliminar registro ${e.currentTarget.dataset.id}?`)) deleteRecords([e.currentTarget.dataset.id]);
+            }));
+            document.querySelectorAll('.edit-btn').forEach(btn => btn.addEventListener('click', e => {
+                const recordId = e.currentTarget.dataset.id;
+                alert(`Funcionalidad de edición para el registro ID: ${recordId} aún no implementada.`);
+            }));
+            document.getElementById('selectAll').checked = filteredRecords.every(r => selectedRecords.has(r.id));
+        }
+        function updateConfirmationRate() {
+            const totalVisits = filteredRecords.length;
+            const confirmedVisits = filteredRecords.filter(record => isConfirmed(record)).length;
+            const confirmationRate = totalVisits > 0 ? (confirmedVisits / totalVisits) * 100 : 0;
+            document.getElementById('confirmationRate').textContent = `${confirmationRate.toFixed(1)}%`;
+        }
+        async function updateWeeklyProgress(promoterName) {
+            const selectedYear = document.getElementById('yearSelect').value;
+            const selectedWeek = document.getElementById('weekSelect').value;
+            weeklyRecords = await fetchWeeklyRecords(selectedWeek || null, selectedYear || null);
+            const container = document.getElementById('promoterProgressContainer');
+            container.innerHTML = '';
+            let totalVerified = 0;
+            let totalGoal = 0;
+            const relevantPromoters = promoters.filter(p => 
+                p.promoter_name !== 'promotor_prueba' && 
+                (promoterName === 'all' || p.promoter_name === promoterName)
+            );
+            const promoterRecordsCount = weeklyRecords.reduce((acc, record) => {
+                if (isConfirmed(record)) {
+                    acc[record.promoter_name] = (acc[record.promoter_name] || 0) + 1;
+                }
+                return acc;
+            }, {});
+            const promoterDaysWorked = weeklyRecords.reduce((acc, record) => {
+                if (isConfirmed(record)) {
+                    const date = new Date(record.created_at).toISOString().split('T')[0];
+                    acc[record.promoter_name] = acc[record.promoter_name] || new Set();
+                    acc[record.promoter_name].add(date);
+                }
+                return acc;
+            }, {});
+            let promotersWithProgress = relevantPromoters.map(promoter => {
+                const visitedCount = promoterRecordsCount[promoter.promoter_name] || 0;
+                const assignedCount = promoter.clientes_asig || 0;
+                const progress = assignedCount > 0 ? (visitedCount / assignedCount) * 100 : 0;
+                const daysWorked = promoterDaysWorked[promoter.promoter_name] ? promoterDaysWorked[promoter.promoter_name].size : 0;
+                totalVerified += visitedCount;
+                totalGoal += assignedCount;
+                return {
+                    ...promoter,
+                    visitedCount,
+                    progress,
+                    daysWorked
+                };
+            });
+            const hideNoVisits = document.getElementById('hideNoVisits').checked;
+            if (hideNoVisits) {
+                promotersWithProgress = promotersWithProgress.filter(p => p.visitedCount > 0);
+            }
+            promotersWithProgress.sort((a, b) => b.progress - a.progress);
+            promotersWithProgress.forEach(promoter => {
+                const progressColor = promoter.progress >= 80 ? 'bg-green-500' : 'bg-red-500';
+                const daysAlertClass = (promoter.daysWorked > promoter.dias_trabajo) ? 'border-orange-500 border-2' : '';
+                const progressHtml = `
+                    <div class="bg-gray-50 p-4 rounded-lg shadow-inner border border-gray-200 ${daysAlertClass}">
+                        <h3 class="text-md font-bold text-gray-800">${promoter.promoter_name}</h3>
+                        <p class="text-sm text-gray-600">
+                            ${promoter.visitedCount} / ${promoter.clientes_asig} Clientes
+                        </p>
+                        <p class="text-xs text-gray-500 mt-1 mb-2">
+                            ${promoter.daysWorked} / ${promoter.dias_trabajo} Días trabajados
+                        </p>
+                        <div class="w-full bg-gray-200 rounded-full h-2 mt-2">
+                            <div class="${progressColor} h-2 rounded-full transition-all duration-500 ease-out" style="width: ${Math.min(100, promoter.progress.toFixed(1))}%;"></div>
+                        </div>
+                        <span class="text-xs font-semibold text-indigo-500 mt-1 block">${promoter.progress.toFixed(1)}%</span>
+                        ${daysAlertClass ? '<p class="text-orange-500 text-xs mt-1 font-semibold">¡Ha excedido los días asignados!</p>' : ''}
+                    </div>
+                `;
+                container.innerHTML += progressHtml;
+            });
+            if (promoterName === 'all') {
+                const totalProgress = totalGoal > 0 ? (totalVerified / totalGoal) * 100 : 0;
+                document.getElementById('totalGoalProgress').textContent = `${totalProgress.toFixed(1)}%`;
+                document.getElementById('totalGoalProgressBar').style.width = `${Math.min(100, totalProgress)}%`;
+            } else {
+                document.getElementById('totalGoalProgress').textContent = 'N/A';
+                document.getElementById('totalGoalProgressBar').style.width = '0%';
+            }
+        }
+        function updateDashboard(promoterName = 'all') { 
+            updateMetrics(); 
+            updateTable(); 
+            updatePaginationInfo(); 
+            updateConfirmationRate(); 
+            updateWeeklyProgress(promoterName); 
+            updateMap();
+        }
+        function updateMetrics() { document.getElementById('totalRecords').textContent = filteredRecords.length; }
+        function showDetails(record) {
+            modalDetailsContent.innerHTML = '';
+            const fields = {
+                'ID': record.id,
+                'Cliente ID': record.cliente_id || 'N/A',
+                'Fecha': record.created_at ? new Date(record.created_at).toLocaleString('es-ES') : 'N/A',
+                'Promotor': record.promoter_name,
+                'Comercio': record.trade_name,
+                'Estado': record.estado,
+                'Zona': record.zona,
+                'Distancia (m)': record.distance > 0 ? `${record.distance} m` : 'N/A',
+                'Coords Visita': record.visit_coords,
+                'Coords Cliente': record.client_coords,
+                'Confirmación': getConfirmationBadge(record),
+                'Comentarios': record.comments
+            };
+            for (const k in fields) {
+                const p = document.createElement('p');
+                if (k === 'Confirmación') {
+                    p.innerHTML = `<b class="text-gray-700">${k}:</b> ${fields[k]}`;
+                } else {
+                    p.innerHTML = `<b class="text-gray-700">${k}:</b> <span class="text-gray-600">${fields[k]}</span>`;
+                }
+                modalDetailsContent.appendChild(p);
+            }
+            const itemsContainer = document.createElement('div');
+            itemsContainer.className = "mt-6 pt-4 border-t border-gray-200";
+            modalDetailsContent.appendChild(itemsContainer);
+            const myItemsTitle = document.createElement('h4');
+            myItemsTitle.className = "text-xl font-bold mb-3 text-gray-800";
+            myItemsTitle.textContent = "Nuestros Productos";
+            itemsContainer.appendChild(myItemsTitle);
+            const myItems = Array.isArray(record.myitems) ? record.myitems : [];
+            if (myItems.length === 0) {
+                const p = document.createElement('p');
+                p.className = "text-gray-500 italic";
+                p.textContent = "No se registraron productos propios en esta visita.";
+                itemsContainer.appendChild(p);
+            } else {
+                const myItemsGrid = document.createElement('div');
+                myItemsGrid.className = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6";
+                itemsContainer.appendChild(myItemsGrid);
+                myItems.forEach(item => {
+                    const itemCard = document.createElement('div');
+                    itemCard.className = "bg-gray-50 p-4 rounded-lg shadow-sm border border-gray-100";
+                    itemCard.innerHTML = `
+                        <h5 class="font-semibold text-gray-800 mb-2">${item.presentation || 'N/A'}</h5>
+                        <p class="text-sm text-gray-600"><b>Precio Propio:</b> <span class="font-bold text-green-700">${item.price ? `$${item.price} ${item.currency || ''}` : 'N/A'}</span></p>
+                        <p class="text-sm text-gray-600"><b>Stock en Estante:</b> <span class="font-semibold">${item.stock_shelf ?? 'N/A'}</span></p>
+                        <p class="text-sm text-gray-600"><b>Stock en Almacén:</b> <span class="font-semibold">${item.stock_warehouse ?? 'N/A'}</span></p>
+                    `;
+                    myItemsGrid.appendChild(itemCard);
+                });
+            }
+            const competitorItemsTitle = document.createElement('h4');
+            competitorItemsTitle.className = "text-xl font-bold mb-3 text-gray-800";
+            competitorItemsTitle.textContent = "Productos de la Competencia";
+            itemsContainer.appendChild(competitorItemsTitle);
+            const competitorItems = Array.isArray(record.competitoritems) ? record.competitoritems : [];
+            if (competitorItems.length === 0) {
+                const p = document.createElement('p');
+                p.className = "text-gray-500 italic";
+                p.textContent = "No se registraron productos de la competencia en esta visita.";
+                itemsContainer.appendChild(p);
+            } else {
+                const competitorItemsGrid = document.createElement('div');
+                competitorItemsGrid.className = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4";
+                itemsContainer.appendChild(competitorItemsGrid);
+                competitorItems.forEach(item => {
+                    const itemCard = document.createElement('div');
+                    itemCard.className = "bg-gray-50 p-4 rounded-lg shadow-sm border border-gray-100";
+                    itemCard.innerHTML = `
+                        <h5 class="font-semibold text-gray-800 mb-2">${item.presentation || 'N/A'}</h5>
+                        <p class="text-sm text-gray-600"><b>Precio Competencia:</b> <span class="font-bold text-red-700">${item.price ? `$${item.price} ${item.currency || ''}` : 'N/A'}</span></p>
+                    `;
+                    competitorItemsGrid.appendChild(itemCard);
+                });
+            }
+            detailsModal.style.display = 'flex';
+        }
+        function updateSelected() {
+            selectedRecords.clear();
+            document.querySelectorAll('.selectRecord').forEach(cb => {
+                if (cb.checked) {
+                    selectedRecords.add(cb.dataset.id);
+                }
+            });
+            document.getElementById('deleteSelected').disabled = selectedRecords.size === 0;
+            document.getElementById('selectedCount').textContent = selectedRecords.size;
+        }
+        async function deleteRecords(ids) {
+            const response = await fetch('/delete_records', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids })
+            });
+            const result = await response.json();
+            if (result.success) {
+                allRecords = allRecords.filter(r => !ids.includes(r.id));
+                filterRecords();
+                selectedRecords.clear(); updateSelected();
+            } else alert('Error al eliminar');
+        }
+        function updatePaginationInfo() {
+            const totalPages = Math.ceil(filteredRecords.length / recordsPerPage);
+            document.getElementById('pageInfo').textContent = `Página ${currentPage} de ${totalPages || 1}`;
+            document.getElementById('prevPage').disabled = currentPage === 1;
+            document.getElementById('nextPage').disabled = currentPage === totalPages || totalPages === 0;
+        }
+        function populateSelects() {
+            const promoterSelect = document.getElementById('promoter');
+            promoterSelect.innerHTML = '<option value="all">Todos los promotores</option>';
+            const uniquePromoterNames = [...new Set(promoters.map(p => p.promoter_name))].filter(name => name !== 'promotor_prueba').sort();
+            uniquePromoterNames.forEach(name => {
+                const option = document.createElement('option');
+                option.value = name;
+                option.textContent = name;
+                promoterSelect.appendChild(option);
+            });
+            const stateSelect = document.getElementById('state');
+            stateSelect.innerHTML = '<option value="all">Todos los estados</option>';
+            const uniqueEstados = [...new Map(estados.map(item => [item['id'], item])).values()];
+            uniqueEstados.sort((a, b) => a.nombre.localeCompare(b.nombre));
+            uniqueEstados.forEach(estado => {
+                const option = document.createElement('option');
+                option.value = estado.id; 
+                option.textContent = estado.nombre; 
+                stateSelect.appendChild(option);
+            });
+            updateZoneFilter();
+        }
+        function updateMap() {
+            if (!map) {
+                map = L.map('map').setView([0, 0], 2);
+                L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                }).addTo(map);
+            } else {
+                map.eachLayer(layer => {
+                    if (layer instanceof L.Marker) {
+                        map.removeLayer(layer);
+                    }
+                });
+            }
+
+            let bounds = L.latLngBounds([]);
+            filteredRecords.forEach(record => {
+                if (record.visit_coords && record.visit_coords !== 'N/A') {
+                    const [lat, lng] = record.visit_coords.split(',').map(coord => parseFloat(coord.trim()));
+                    if (!isNaN(lat) && !isNaN(lng)) {
+                        const markerColor = isConfirmed(record) ? 'green' : 'red';
+                        const marker = L.circleMarker([lat, lng], {
+                            color: markerColor,
+                            radius: 5
+                        }).addTo(map).bindPopup(`Promotor: ${record.promoter_name}<br>Comercio: ${record.trade_name}<br>Confirmación: ${record.verified}`);
+                        bounds.extend([lat, lng]);
+                    }
+                }
+            });
+
+            if (bounds.isValid()) {
+                map.fitBounds(bounds, { padding: [50, 50] });
+            } else {
+                map.setView([0, 0], 2);
+            }
+        }
+        async function init() {
+            const today = getTodayMinus4Hours();
+            document.getElementById('dateFrom').value = today;
+            document.getElementById('dateTo').value = today;
+            populateYears();
+            const initialYear = getCurrentYear();
+            document.getElementById('yearSelect').value = initialYear;
+            await populateWeeks(initialYear);
+            const initialFilters = { dateFrom: today, dateTo: today, promoterId: 'all' };
+            allRecords = await fetchRecordsFromAPI(initialFilters);
+            populateSelects();
+            document.querySelectorAll('#dateFrom, #dateTo').forEach(el => el.addEventListener('change', filterRecords));
+            document.getElementById('promoter').addEventListener('change', filterRecords);
+            document.getElementById('state').addEventListener('change', updateZoneFilter);
+            document.getElementById('zone').addEventListener('change', filterRecords);
+            document.getElementById('confirmation').addEventListener('change', filterRecords);
+            document.getElementById('hideNoVisits').addEventListener('change', () => updateWeeklyProgress(document.getElementById('promoter').value));
+            document.getElementById('yearSelect').addEventListener('change', async (e) => {
+                await populateWeeks(e.target.value);
+                updateWeeklyProgress(document.getElementById('promoter').value);
+            });
+            document.getElementById('weekSelect').addEventListener('change', () => updateWeeklyProgress(document.getElementById('promoter').value));
+            document.getElementById('selectAll').addEventListener('change', e => {
+                document.querySelectorAll('.selectRecord').forEach(cb => cb.checked = e.target.checked);
+                updateSelected();
+            });
+            document.getElementById('prevPage').addEventListener('click', () => { if (currentPage > 1) { currentPage--; updateDashboard(); } });
+            document.getElementById('nextPage').addEventListener('click', () => {
+                const totalPages = Math.ceil(filteredRecords.length / recordsPerPage);
+                if (currentPage < totalPages) { currentPage++; updateDashboard(); }
+            });
+            document.getElementById('deleteSelected').addEventListener('click', () => {
+                if (selectedRecords.size > 0) deleteRecords(Array.from(selectedRecords));
+            });
+            document.getElementById('exportCSV').addEventListener('click', () => alert('Exportar CSV pendiente'));
+            filterRecords();
+        }
+        init();
+    </script>
+</body>
+</html>

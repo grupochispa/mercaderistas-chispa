@@ -1,0 +1,1252 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CAPTA — Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <style>
+    .no-scrollbar::-webkit-scrollbar { display:none; }
+    .no-scrollbar { -ms-overflow-style:none; scrollbar-width:none; }
+
+    /* Modal */
+    .modal { display:none; position:fixed; inset:0; z-index:1000;
+      background:rgba(0,0,0,.75); justify-content:center; align-items:center; padding:1rem; }
+    .modal.open { display:flex; }
+    .modal-content { background:white; border-radius:16px; max-width:95%;
+      max-height:92vh; width:1080px; overflow-y:auto; position:relative;
+      box-shadow:0 24px 48px rgba(0,0,0,.35); }
+    .dark .modal-content { background:#1E293B; color:#e2e8f0; }
+    .close-btn { position:absolute; top:14px; right:18px; font-size:2rem;
+      font-weight:700; cursor:pointer; color:#9ca3af; line-height:1;
+      background:none; border:none; transition:color .15s; }
+    .close-btn:hover { color:#ef4444; }
+
+    /* Lightbox */
+    .lightbox { position:fixed; inset:0; background:rgba(0,0,0,.92);
+      display:flex; align-items:center; justify-content:center; z-index:9999; cursor:zoom-out; }
+    .lightbox img { max-width:90vw; max-height:90vh; border-radius:10px; }
+
+    /* Fotos */
+    .photo-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:.75rem; }
+    .photo-grid img { width:100%; height:120px; object-fit:cover; border-radius:8px;
+      cursor:zoom-in; transition:transform .2s,box-shadow .2s; border:1px solid #e5e7eb; }
+    .photo-grid img:hover { transform:scale(1.04); box-shadow:0 6px 18px rgba(0,0,0,.18); }
+
+    /* Tabla */
+    .table-header-sticky th { position:sticky; top:0; z-index:10; background:#f3f4f6; }
+    .dark .table-header-sticky th { background:#334155; color:#e2e8f0; }
+
+    /* Badges */
+    .badge { display:inline-flex; align-items:center; padding:.25rem .6rem;
+      font-size:.7rem; font-weight:700; border-radius:9999px; white-space:nowrap; }
+    .badge-success     { background:#D1FAE5; color:#065F46; }
+    .badge-destructive { background:#FEE2E2; color:#991B1B; }
+    .badge-warning     { background:#FEF3C7; color:#92400E; }
+    .badge-info        { background:#E0F2FE; color:#0C4A6E; }
+    .badge-default     { background:#F3F4F6; color:#4B5563; }
+    .badge-linea       { display:inline-block; padding:2px 8px; border-radius:9999px;
+      font-size:.65rem; font-weight:700; background:#EEF2FF; color:#4338CA; }
+    .dark .badge-linea { background:#312E81; color:#C7D2FE; }
+
+    /* Delta */
+    .delta-pos { background:#D1FAE5; color:#065F46; }
+    .delta-neg { background:#FEE2E2; color:#991B1B; }
+    .delta-zer { background:#F3F4F6; color:#6B7280; }
+
+    /* Fila tabla */
+    .tbl-row { transition:background .12s; cursor:pointer; }
+    .tbl-row:hover { background:rgba(79,70,229,.06) !important; }
+    .dark .tbl-row:hover { background:rgba(139,92,246,.1) !important; }
+
+    select:focus, input[type="date"]:focus {
+      outline:none; box-shadow:0 0 0 3px rgba(79,70,229,.18); border-color:#4F46E5 !important;
+    }
+
+    /* Secciones modal */
+    .modal-section { border-radius:12px; padding:16px; margin-bottom:14px; }
+    .modal-section-title { font-size:.72rem; font-weight:700; text-transform:uppercase;
+      letter-spacing:.06em; margin-bottom:10px; }
+    .prod-card { border-radius:10px; padding:14px; border:1px solid; }
+  </style>
+</head>
+<body class="bg-gray-50 dark:bg-slate-900 text-gray-900 dark:text-gray-100 font-sans transition-colors duration-300">
+<script>tailwind.config = { darkMode:'class' }</script>
+
+{% include 'navbar.html' %}
+
+<div class="container mx-auto p-4 sm:p-6 lg:p-8">
+
+  <!-- ══ FILTROS + KPIs ══════════════════════════════════════════ -->
+  <div class="bg-white dark:bg-slate-800 shadow-lg rounded-2xl p-6 mb-8 border border-gray-100 dark:border-slate-700">
+    <h2 class="text-2xl font-bold text-gray-700 dark:text-white mb-5">Filtros y Métricas</h2>
+
+    <!-- KPIs -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+      <div class="bg-indigo-50 dark:bg-indigo-900/30 p-4 rounded-xl text-center border border-indigo-100 dark:border-indigo-800">
+        <p class="text-2xl font-extrabold text-indigo-600" id="totalPromoters">0</p>
+        <p class="text-xs text-indigo-500 dark:text-indigo-300 font-medium mt-1">Promotores</p>
+      </div>
+      <div class="bg-green-50 dark:bg-green-900/30 p-4 rounded-xl text-center border border-green-100 dark:border-green-800">
+        <p class="text-2xl font-extrabold text-green-600" id="totalRecords">0</p>
+        <p class="text-xs text-green-500 dark:text-green-300 font-medium mt-1">
+          Visitas únicas
+          <span class="block text-gray-400 font-normal" style="font-size:.65rem">(por comercio/día)</span>
+        </p>
+      </div>
+      <div class="bg-blue-50 dark:bg-blue-900/30 p-4 rounded-xl text-center border border-blue-100 dark:border-blue-800">
+        <p class="text-2xl font-extrabold text-blue-600" id="confirmationRate">0%</p>
+        <p class="text-xs text-blue-500 dark:text-blue-300 font-medium mt-1">Confirmación GPS</p>
+      </div>
+      <div class="bg-purple-50 dark:bg-purple-900/30 p-4 rounded-xl text-center border border-purple-100 dark:border-purple-800">
+        <p class="text-base font-bold text-purple-600">Meta: <span id="totalGoalProgress">0%</span></p>
+        <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mt-2">
+          <div id="totalGoalProgressBar" class="bg-purple-600 h-2 rounded-full transition-all duration-500" style="width:0%"></div>
+        </div>
+        <p class="text-xs text-gray-400 mt-1" id="metaDetalle">0 únicas / 0 meta</p>
+      </div>
+    </div>
+
+    <!-- Filtros fila 1 -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Fecha desde</label>
+        <input type="date" id="dateFrom" class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm">
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Fecha hasta</label>
+        <input type="date" id="dateTo" class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm">
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Promotor</label>
+        <select id="promoter" class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm">
+          <option value="all">Todos los promotores</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Estado</label>
+        <select id="state" class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm">
+          <option value="all">Todos los estados</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Filtros fila 2 -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Zona</label>
+        <select id="zone" class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm" disabled>
+          <option value="all">Todas las zonas</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Confirmación GPS</label>
+        <select id="confirmation" class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm">
+          <option value="all">Todos</option>
+          <option value="verificado">Confirmados</option>
+          <option value="no_verificado">No Confirmados</option>
+          <option value="desconocido">Sin coord. cliente</option>
+          <option value="sin_coordenadas">Sin GPS visita</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
+          Línea <span class="text-indigo-400 font-normal normal-case">↓ filtra en servidor</span>
+        </label>
+        <select id="linea_filter" class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm">
+          <option value="all">Todas las líneas</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
+          Comercio <span class="text-indigo-400 font-normal normal-case">↓ filtra en servidor</span>
+        </label>
+        <select id="cliente_filter" class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm">
+          <option value="all">Todos los comercios</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="flex flex-wrap gap-3 justify-end border-t dark:border-slate-700 pt-4">
+      <button id="exportCSV"
+        class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-5 rounded-lg shadow transition-all flex items-center gap-2">
+        <i class="fas fa-file-csv"></i> Exportar CSV
+      </button>
+      <button id="exportXLSX"
+        class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 px-5 rounded-lg shadow transition-all flex items-center gap-2">
+        <i class="fas fa-file-excel"></i> Exportar Excel
+      </button>
+      <button id="deleteSelected"
+        class="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-5 rounded-lg shadow transition-all flex items-center gap-2" disabled>
+        <i class="fas fa-trash-alt"></i> Eliminar (<span id="selectedCount">0</span>)
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ META SEMANAL ══════════════════════════════════════════════ -->
+  <div class="bg-white dark:bg-slate-800 shadow-lg rounded-2xl p-6 mb-8 border border-gray-100 dark:border-slate-700">
+    <div class="flex items-center justify-between flex-wrap gap-4 mb-4">
+      <h2 class="text-2xl font-bold text-gray-700 dark:text-white">Meta de Visitas Semanal</h2>
+      <div class="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-900/30 px-4 py-2 rounded-xl border border-indigo-100 dark:border-indigo-800">
+        <i class="fas fa-info-circle text-indigo-400 text-xs"></i>
+        <span class="text-xs text-indigo-600 dark:text-indigo-300 font-medium">
+          Visitas únicas por comercio/día — múltiples líneas en un mismo comercio = 1 visita
+        </span>
+      </div>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Año</label>
+        <select id="yearSelect" class="w-full border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg p-2 text-sm">
+          <option value="">Selecciona un año</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Semana</label>
+        <select id="weekSelect" class="w-full border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg p-2 text-sm" disabled>
+          <option value="">Selecciona una semana</option>
+        </select>
+      </div>
+    </div>
+    <div class="mb-5">
+      <label class="flex items-center gap-2 text-gray-700 dark:text-gray-300 text-sm cursor-pointer select-none">
+        <input type="checkbox" id="hideNoVisits" class="rounded text-indigo-600">
+        Ocultar promotores sin visitas esta semana
+      </label>
+    </div>
+    <div id="promoterProgressContainer" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5"></div>
+  </div>
+
+  <!-- ══ TABLA DE VISITAS ══════════════════════════════════════════ -->
+  <div class="bg-white dark:bg-slate-800 shadow-lg rounded-2xl p-6 mb-8 border border-gray-100 dark:border-slate-700">
+    <div class="flex items-center justify-between flex-wrap gap-4 mb-4">
+      <h2 class="text-2xl font-bold text-gray-700 dark:text-white">Detalle de Visitas</h2>
+      <span id="tablaInfo" class="text-xs font-semibold text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 dark:text-indigo-300 px-3 py-1 rounded-full">—</span>
+    </div>
+
+    <div id="loadingMessage" class="text-center text-indigo-500 py-6 hidden">
+      <i class="fas fa-spinner fa-spin mr-2"></i> Cargando datos...
+    </div>
+
+    <div class="overflow-x-auto max-h-[70vh] relative rounded-xl border border-gray-200 dark:border-slate-700">
+      <table class="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
+        <thead class="table-header-sticky">
+          <tr>
+            <th class="py-3 px-3 w-10">
+              <input type="checkbox" id="selectAll" class="rounded text-indigo-600">
+            </th>
+            <th class="py-3 px-3 text-left text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Fecha</th>
+            <th class="py-3 px-3 text-left text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Promotor</th>
+            <th class="py-3 px-3 text-left text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Comercio</th>
+            <th class="py-3 px-3 text-left text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Líneas</th>
+            <th class="py-3 px-3 text-left text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Estado</th>
+            <th class="py-3 px-3 text-left text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Zona</th>
+            <th class="py-3 px-3 text-left text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Dist.(m)</th>
+            <th class="py-3 px-3 text-left text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">GPS</th>
+            <th class="py-3 px-3 text-left text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Ver</th>
+          </tr>
+        </thead>
+        <tbody id="priceRecordsTable" class="divide-y divide-gray-100 dark:divide-slate-700 bg-white dark:bg-slate-800"></tbody>
+      </table>
+    </div>
+
+    <!-- Paginación -->
+    <div class="flex justify-between items-center mt-4 text-sm text-gray-600 dark:text-gray-400">
+      <button id="prevPage"
+        class="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 dark:bg-slate-700 dark:hover:bg-slate-600 text-indigo-600 dark:text-indigo-300 rounded-lg transition disabled:opacity-40"
+        disabled>← Anterior</button>
+      <span id="pageInfo" class="font-medium">Página 1 de 1</span>
+      <button id="nextPage"
+        class="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 dark:bg-slate-700 dark:hover:bg-slate-600 text-indigo-600 dark:text-indigo-300 rounded-lg transition disabled:opacity-40"
+        disabled>Siguiente →</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══ MODAL DETALLE VISITA ══════════════════════════════════════ -->
+<div id="detailsModal" class="modal">
+  <div class="modal-content p-6 sm:p-8">
+    <button class="close-btn" id="closeDetailsModal">×</button>
+    <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-1 pr-10" id="modalComercioTitulo">—</h2>
+    <p class="text-sm text-gray-400 mb-6" id="modalSubtitulo">—</p>
+    <div id="modalDetailsContent"></div>
+  </div>
+</div>
+<!-- ══ MODAL ESPACIO ADICIONAL ═══════════════════════════════════ -->
+<div id="espacioModal" class="modal" style="z-index:1100">
+  <div class="modal-content p-6 sm:p-8" style="width:560px">
+    <button class="close-btn" id="closeEspacioModal">×</button>
+    <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-1 pr-10" id="espacioModalTitulo">—</h2>
+    <p class="text-sm text-gray-400 mb-5" id="espacioModalResumen">—</p>
+    <div id="espacioModalContent"></div>
+  </div>
+</div>
+
+<script>
+tailwind.config = { darkMode:'class' };
+
+// ── Constantes ────────────────────────────────────────────────────
+const SUPABASE_URL   = 'https://djjylikkocemrlsjxscr.supabase.co';
+const STORAGE_BASE   = `${SUPABASE_URL}/storage/v1/object/public/visits_photos/`;
+const RECORDS_PER_PAGE = 25;
+
+let empresaId = localStorage.getItem('empresa_id');
+(async () => {
+  if (!empresaId) {
+    try {
+      const r = await fetch('/api/dashboard/config');
+      if (r.ok) {
+        const cfg = await r.json();
+        empresaId = cfg.empresa_id;
+        localStorage.setItem('empresa_id',      cfg.empresa_id);
+        localStorage.setItem('empresa_nombre',  cfg.empresa_nombre);
+      } else { window.location.replace('/'); }
+    } catch { window.location.replace('/'); }
+  }
+})();
+
+// ── Estado global ─────────────────────────────────────────────────
+let allRecords      = [];   // registros raw del servidor
+let groupedRecords  = [];   // visitas agrupadas por promotor+comercio+día
+let filteredGroups  = [];   // grupos filtrados para mostrar en tabla
+let promoters       = [];
+let estados         = [];
+let zonas           = [];
+let lineas          = [];
+let selectedRecords = new Set();
+let currentPage     = 1;
+const apiCache      = new Map();
+
+function mergePromoters(incoming) {
+  if (!incoming?.length) return;
+  const map = new Map(promoters.map(p => [p.promoter_id, p]));
+  let changed = false;
+  (incoming || []).forEach(p => {
+    if (p.promoter_id && !map.has(p.promoter_id)) { map.set(p.promoter_id, p); changed = true; }
+  });
+  if (changed) {
+    promoters = [...map.values()];
+    document.getElementById('totalPromoters').textContent = promoters.length;
+  }
+}
+
+// ── Helpers fecha ─────────────────────────────────────────────────
+function getTodayMinus4Hours() {
+  return new Date(Date.now() - 4 * 3600 * 1000).toISOString().split('T')[0];
+}
+function getCurrentYear() { return new Date().getFullYear(); }
+function getISOWeek(date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+}
+function getCurrentISOWeek() { return getISOWeek(new Date(Date.now() - 4 * 3600 * 1000)); }
+function dateKey(isoString) {
+  // Extrae YYYY-MM-DD en hora local ajustada -4h
+  return new Date(new Date(isoString).getTime() - 4*3600*1000).toISOString().split('T')[0];
+}
+
+// ── AGRUPACIÓN: promotor + comercio + día = 1 visita única ────────
+function agruparVisitas(records) {
+  const map = new Map();
+  records.forEach(r => {
+    const key = `${r.promoter_id || r.promoter_name}|${(r.trade||'').toUpperCase()}|${dateKey(r.created_at)}`;
+    if (!map.has(key)) {
+      map.set(key, {
+        // Usamos el primer registro como representante del grupo
+        _key:        key,
+        _records:    [],
+        id:          r.id,
+        created_at:  r.created_at,
+        promoter_id: r.promoter_id,
+        promoter_name: r.promoter_name,
+        trade:       r.trade,
+        state:       r.state,
+        zone:        r.zone,
+        latitude:    r.latitude,
+        longitude:   r.longitude,
+        distance:    r.distance,
+        verified:    r.verified,
+        client_coords: r.client_coords,
+        lineas:      [],   // líneas trabajadas en esta visita agrupada
+      });
+    }
+    const g = map.get(key);
+    g._records.push(r);
+    // Acumular líneas únicas
+    if (r.linea_nombre && !g.lineas.includes(r.linea_nombre)) {
+      g.lineas.push(r.linea_nombre);
+    }
+    // Si este registro tiene mejor GPS, usarlo
+    if (r.distance > 0 && (g.distance === 0 || g.distance == null)) {
+      g.distance    = r.distance;
+      g.verified    = r.verified;
+      g.latitude    = r.latitude;
+      g.longitude   = r.longitude;
+      g.client_coords = r.client_coords;
+    }
+  });
+  return [...map.values()];
+}
+
+// ── Badges ────────────────────────────────────────────────────────
+function getConfirmationBadge(r) {
+  if (!r.latitude || !r.longitude)
+    return `<span class="badge badge-default"><i class="fas fa-question-circle mr-1"></i>Sin GPS</span>`;
+  if (!r.client_coords || r.client_coords === 'N/A')
+    return `<span class="badge badge-info"><i class="fas fa-store-slash mr-1"></i>Sin coord.</span>`;
+  if (r.distance < 150)
+    return `<span class="badge badge-success"><i class="fas fa-check-circle mr-1"></i>Confirmado</span>`;
+  return `<span class="badge badge-destructive"><i class="fas fa-times-circle mr-1"></i>No conf.</span>`;
+}
+function isConfirmed(r) {
+  return r.latitude && r.longitude && r.client_coords && r.client_coords !== 'N/A' && r.distance < 150;
+}
+
+// ── Zone filter ───────────────────────────────────────────────────
+function updateZoneFilter() {
+  const stateId = document.getElementById('state').value;
+  const zoneSel = document.getElementById('zone');
+  zoneSel.innerHTML = '<option value="all">Todas las zonas</option>';
+  if (stateId === 'all') { zoneSel.disabled = true; filterRecords(); return; }
+  zoneSel.disabled = false;
+  zonas.filter(z => String(z.estado_id) === String(stateId)).forEach(z => {
+    const o = document.createElement('option');
+    o.value = z.nombre; o.textContent = z.nombre;
+    zoneSel.appendChild(o);
+  });
+  filterRecords();
+}
+
+// ── Fetch API ─────────────────────────────────────────────────────
+async function fetchRecordsFromAPI(filters) {
+  const cacheKey = JSON.stringify({ ...filters, _eid: empresaId });
+  if (apiCache.has(cacheKey)) {
+    const c = apiCache.get(cacheKey);
+    mergePromoters(c.promoters);
+    estados = c.estados || []; zonas = c.zonas || [];
+    lineas  = c.lineas  || [];
+    return c.records || [];
+  }
+  document.getElementById('loadingMessage').classList.remove('hidden');
+  const p = new URLSearchParams();
+  if (filters.dateFrom) p.append('date_from', filters.dateFrom);
+  if (filters.dateTo)   p.append('date_to',   filters.dateTo);
+  if (filters.promoterId && filters.promoterId !== 'all') p.append('promoter_id', filters.promoterId);
+  if (filters.lineaId   && filters.lineaId    !== 'all') p.append('linea_id',    filters.lineaId);
+  if (filters.trade     && filters.trade      !== 'all') p.append('trade',       filters.trade);
+  if (filters.week)  p.append('week', filters.week);
+  if (filters.year)  p.append('year', filters.year);
+  p.append('empresa_id', empresaId);
+  try {
+    const res  = await fetch(`/api/records?${p.toString()}`);
+    const data = await res.json();
+    mergePromoters(data.promoters);
+    estados = data.estados || []; zonas = data.zonas || [];
+    lineas  = data.lineas  || [];
+
+    // Enriquecer gramaje/unidad (necesario para registros legacy sin gramaje)
+    const enrichedRecords = await window.captaEnrichItems(
+      data.records || [],
+      empresaId,
+      window.db
+    );
+    apiCache.set(cacheKey, { ...data, records: enrichedRecords });
+    document.getElementById('loadingMessage').classList.add('hidden');
+    return enrichedRecords;
+  } catch(err) {
+    document.getElementById('loadingMessage').innerHTML =
+      `<span class="text-red-500"><i class="fas fa-exclamation-circle mr-1"></i>Error: ${err.message}</span>`;
+    return [];
+  }
+}
+
+async function fetchWeeklyRecords(week = null, year = null) {
+  const p = new URLSearchParams();
+  p.append('empresa_id', empresaId);
+  p.append('promoter_id', 'all');
+  if (week && year) { p.append('week', week); p.append('year', year); }
+  else {
+    const today = new Date(), dow = today.getDay();
+    const mon = new Date(today); mon.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1));
+    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+    p.append('date_from', mon.toISOString().split('T')[0]);
+    p.append('date_to',   sun.toISOString().split('T')[0]);
+  }
+  const cacheKey = `_weekly_${p.toString()}`;
+  if (apiCache.has(cacheKey)) return apiCache.get(cacheKey);
+  try {
+    const res  = await fetch(`/api/records?${p.toString()}`);
+    const data = await res.json();
+    if (promoters.length === 0) mergePromoters(data.promoters);
+    const records = data.records || [];
+    apiCache.set(cacheKey, records);
+    return records;
+  } catch { return []; }
+}
+
+// ── Poblar selects ────────────────────────────────────────────────
+function populateSelects() {
+  const pSel = document.getElementById('promoter');
+  pSel.innerHTML = '<option value="all">Todos los promotores</option>';
+  [...new Set(promoters.map(p => p.promoter_name))].filter(n => n).sort().forEach(name => {
+    const o = document.createElement('option'); o.value = name; o.textContent = name;
+    pSel.appendChild(o);
+  });
+
+  const sSel = document.getElementById('state');
+  sSel.innerHTML = '<option value="all">Todos los estados</option>';
+  [...new Map(estados.map(e => [e.id, e])).values()]
+    .sort((a,b) => a.nombre.localeCompare(b.nombre))
+    .forEach(e => {
+      const o = document.createElement('option'); o.value = e.id; o.textContent = e.nombre;
+      sSel.appendChild(o);
+    });
+
+  const lSel = document.getElementById('linea_filter');
+  lSel.innerHTML = '<option value="all">Todas las líneas</option>';
+  lineas.forEach(l => {
+    const o = document.createElement('option'); o.value = l.id; o.textContent = l.nombre;
+    lSel.appendChild(o);
+  });
+
+  const cSel = document.getElementById('cliente_filter');
+  cSel.innerHTML = '<option value="all">Todos los comercios</option>';
+  [...new Set(allRecords.map(r => r.trade).filter(Boolean))].sort().forEach(t => {
+    const o = document.createElement('option'); o.value = t; o.textContent = t;
+    cSel.appendChild(o);
+  });
+
+  updateZoneFilter();
+}
+
+// ── Filtrar ───────────────────────────────────────────────────────
+async function filterRecords() {
+  const dateFrom   = document.getElementById('dateFrom').value;
+  const dateTo     = document.getElementById('dateTo').value;
+  const pName      = document.getElementById('promoter').value;
+  const stateTxt   = document.getElementById('state').options[document.getElementById('state').selectedIndex].text;
+  const zoneTxt    = document.getElementById('zone').options[document.getElementById('zone').selectedIndex].text;
+  const confirmVal = document.getElementById('confirmation').value;
+  const lineaId    = document.getElementById('linea_filter').value;
+  const clienteVal = document.getElementById('cliente_filter').value;
+
+  const pObj       = promoters.find(p => p.promoter_name === pName);
+  const promoterId = (pName === 'all' || !pObj) ? 'all' : pObj.promoter_id;
+
+  allRecords = await fetchRecordsFromAPI({
+    dateFrom, dateTo, promoterId, lineaId,
+    trade: clienteVal,
+  });
+
+  // Filtros client-side sobre registros raw
+  const filteredRaw = allRecords.filter(r => {
+    if (pName !== 'all' && r.promoter_name !== pName) return false;
+    if (stateTxt !== 'Todos los estados' && r.state !== stateTxt) return false;
+    if (zoneTxt  !== 'Todas las zonas'   && r.zone  !== zoneTxt)  return false;
+    if (lineaId  !== 'all' && r.linea_id !== lineaId)  return false;
+    if (clienteVal !== 'all' && r.trade  !== clienteVal) return false;
+    if (confirmVal !== 'all') {
+      const hv = r.latitude && r.longitude;
+      const hc = r.client_coords && r.client_coords !== 'N/A';
+      if (confirmVal === 'verificado'      && (!hv || !hc || r.distance >= 150)) return false;
+      if (confirmVal === 'no_verificado'   && (hv && hc && r.distance < 150))    return false;
+      if (confirmVal === 'sin_coordenadas' && hv)                                 return false;
+      if (confirmVal === 'desconocido'     && hc)                                 return false;
+    }
+    return true;
+  });
+
+  // ── AGRUPAR por promotor + comercio + día ────────────────────────
+  groupedRecords = agruparVisitas(filteredRaw);
+  filteredGroups = [...groupedRecords];
+
+  currentPage = 1;
+  updateDashboard(pName);
+}
+
+// ── Dashboard ─────────────────────────────────────────────────────
+function updateDashboard(pName = 'all') {
+  updateMetrics();
+  updateTable();
+  updatePagination();
+  updateConfirmationRate();
+  updateWeeklyProgress(pName);
+}
+
+function updateMetrics() {
+  // Visitas únicas = grupos
+  document.getElementById('totalRecords').textContent = filteredGroups.length;
+  document.getElementById('tablaInfo').textContent    =
+    `${filteredGroups.length} visitas únicas · ${allRecords.length} registros totales`;
+}
+
+function updatePagination() {
+  const total = Math.ceil(filteredGroups.length / RECORDS_PER_PAGE);
+  document.getElementById('pageInfo').textContent = `Página ${currentPage} de ${total || 1}`;
+  document.getElementById('prevPage').disabled = currentPage === 1;
+  document.getElementById('nextPage').disabled = currentPage === total || total === 0;
+}
+
+function updateConfirmationRate() {
+  const total = filteredGroups.length;
+  const conf  = filteredGroups.filter(isConfirmed).length;
+  document.getElementById('confirmationRate').textContent =
+    total > 0 ? `${Math.round((conf / total) * 100)}%` : '0%';
+}
+
+// ── META SEMANAL — basada en visitas únicas ───────────────────────
+function populateYears() {
+  const sel = document.getElementById('yearSelect');
+  const cur = getCurrentYear();
+  for (let y = cur; y >= cur - 3; y--) {
+    const o = document.createElement('option'); o.value = y; o.textContent = y;
+    if (y === cur) o.selected = true;
+    sel.appendChild(o);
+  }
+}async function populateWeeks(year) {
+  const sel = document.getElementById('weekSelect');
+  sel.innerHTML = '<option value="">Selecciona una semana</option>';
+  sel.disabled  = true;
+  if (!year) return;
+  try {
+    const res   = await fetch(`/api/weeks_with_visits?empresa_id=${empresaId}&year=${year}`);
+    const data  = await res.json();
+    const curW  = getCurrentISOWeek();
+    const curY  = getCurrentYear();
+    const weeks = data.weeks || [];
+    if (parseInt(year) === curY && !weeks.includes(curW)) weeks.unshift(curW);
+    weeks.forEach(w => {
+      const o = document.createElement('option'); o.value = w;
+      o.textContent = `Semana ${w}${(parseInt(year) === curY && w === curW) ? ' (actual)' : ''}`;
+      sel.appendChild(o);
+    });
+    sel.disabled = false;
+    window._skipWeekChange = true;
+    if (parseInt(year) === curY) sel.value = curW;
+    else if (weeks.length > 0)  sel.value = weeks[weeks.length - 1];
+    setTimeout(() => { window._skipWeekChange = false; }, 0);
+  } catch(e) { console.error('populateWeeks:', e); }
+}
+
+async function updateWeeklyProgress(pName = 'all') {
+  const myToken = (window._weeklyToken = (window._weeklyToken || 0) + 1);
+  const week    = document.getElementById('weekSelect').value;
+  const year    = document.getElementById('yearSelect').value;
+  const hide    = document.getElementById('hideNoVisits').checked;
+  const cont    = document.getElementById('promoterProgressContainer');
+
+  const weekRaw = await fetchWeeklyRecords(week || null, year || null);
+  if (myToken !== window._weeklyToken) return;
+
+  // ── Agrupar visitas semanales ────────────────────────────────────
+  const weekGroups = agruparVisitas(weekRaw);
+
+  cont.innerHTML = '';
+  const seen = new Map();
+  promoters.forEach(p => { if (p.promoter_id && !seen.has(p.promoter_id)) seen.set(p.promoter_id, p); });
+  const listaFinal = [...seen.values()];
+  if (!listaFinal.length) return;
+
+  let totalGoal = 0, totalUniq = 0;
+
+  listaFinal
+    .filter(p => pName === 'all' || p.promoter_name === pName)
+    .forEach(p => {
+      // Visitas únicas de este promotor en la semana
+      const myGroups = weekGroups.filter(g => g.promoter_id === p.promoter_id || g.promoter_name === p.promoter_name);
+      const conf     = myGroups.filter(isConfirmed).length;
+      const days     = parseInt(p.dias_trabajo) || 5;
+      const goal     = days * 8;
+      totalGoal += goal; totalUniq += myGroups.length;
+
+      if (hide && myGroups.length === 0) return;
+
+      const pct = goal > 0 ? Math.min(100, (conf / goal) * 100) : 0;
+      const color = pct >= 80 ? 'bg-green-500' : pct >= 50 ? 'bg-yellow-500' : 'bg-red-500';
+      cont.innerHTML += `
+        <div class="bg-gray-50 dark:bg-slate-700 p-4 rounded-xl border border-gray-100 dark:border-slate-600 shadow-sm">
+          <div class="flex justify-between items-center mb-2">
+            <p class="font-semibold text-gray-800 dark:text-white text-sm truncate max-w-[65%]">${p.promoter_name}</p>
+            <span class="text-xs font-bold text-gray-500 dark:text-gray-400">${myGroups.length}/${goal}</span>
+          </div>
+          <div class="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2 mb-1">
+            <div class="${color} h-2 rounded-full transition-all duration-500" style="width:${pct}%"></div>
+          </div>
+          <p class="text-xs text-gray-400 dark:text-gray-500">
+            ${pct.toFixed(0)}% meta · ${conf} conf. GPS de ${myGroups.length} visita${myGroups.length !== 1 ? 's' : ''}
+          </p>
+          ${myGroups.length > goal ? '<p class="text-orange-500 text-xs font-semibold mt-1">¡Superó la meta!</p>' : ''}
+        </div>`;
+    });
+
+  // ── KPI de meta global (arriba del dashboard) ────────────────────
+  // Se calcula sobre visitas ÚNICAS vs meta total (no confirmadas GPS,
+  // porque la meta es de visitas, no de GPS)
+  const pctUniq   = totalGoal > 0 ? (totalUniq / totalGoal) * 100 : 0;
+  const pctColor  = pctUniq >= 80 ? '#22c55e' : pctUniq >= 50 ? '#eab308' : '#a855f7';
+
+  // Actualizar el span del texto "Meta: X%"
+  const progSpan = document.getElementById('totalGoalProgress');
+  if (progSpan) progSpan.textContent = `${Math.round(pctUniq)}%`;
+
+  // Actualizar la barra de progreso
+  const progBar = document.getElementById('totalGoalProgressBar');
+  if (progBar) {
+    progBar.style.width = `${Math.min(100, pctUniq)}%`;
+    progBar.style.background = pctColor;
+  }
+
+  // Texto de detalle: visitas únicas / meta
+  const detalle = document.getElementById('metaDetalle');
+  if (detalle) detalle.textContent = `${totalUniq} únicas / ${totalGoal} meta`;
+}
+
+// ── Tabla ─────────────────────────────────────────────────────────
+function updateTable() {
+  const tbody = document.getElementById('priceRecordsTable');
+  tbody.innerHTML = '';
+
+  if (!filteredGroups.length) {
+    tbody.innerHTML = `<tr><td colspan="10" class="text-center py-10 text-gray-400 dark:text-gray-500">
+      <i class="fas fa-inbox text-3xl mb-2 block opacity-40"></i>
+      No hay visitas para los filtros aplicados.
+    </td></tr>`;
+    return;
+  }
+
+  const start = (currentPage - 1) * RECORDS_PER_PAGE;
+  filteredGroups.slice(start, start + RECORDS_PER_PAGE).forEach(g => {
+    const badge = getConfirmationBadge(g);
+    const date  = new Date(g.created_at);
+    const fecha = isNaN(date) ? 'N/A' : date.toLocaleDateString('es-ES');
+    const hora  = isNaN(date) ? '' : date.toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' });
+    const dist  = g.distance > 0 ? `${g.distance} m` : '—';
+
+    // Líneas trabajadas en este grupo
+    const lineasBadges = g.lineas.length > 0
+      ? g.lineas.map(l => `<span class="badge-linea mr-1">${l}</span>`).join('')
+      : '<span class="text-gray-400 text-xs">—</span>';
+
+    const row = document.createElement('tr');
+    row.className = 'tbl-row';
+    row.innerHTML = `
+      <td class="py-3 px-3">
+        <input type="checkbox" class="selectRecord rounded text-indigo-600"
+          data-id="${g.id}" ${selectedRecords.has(g.id) ? 'checked' : ''}>
+      </td>
+      <td class="py-3 px-3 whitespace-nowrap">
+        <p class="text-sm font-semibold">${fecha}</p>
+        <p class="text-xs text-gray-400">${hora}</p>
+      </td>
+      <td class="py-3 px-3 text-sm font-medium">${g.promoter_name || '—'}</td>
+      <td class="py-3 px-3 text-sm font-semibold text-gray-800 dark:text-white">${g.trade || '—'}</td>
+      <td class="py-3 px-3" style="max-width:180px">${lineasBadges}</td>
+      <td class="py-3 px-3 text-sm">${g.state || '—'}</td>
+      <td class="py-3 px-3 text-sm">${g.zone  || '—'}</td>
+      <td class="py-3 px-3 text-sm font-mono text-gray-500">${dist}</td>
+      <td class="py-3 px-3">${badge}</td>
+      <td class="py-3 px-3">
+        <button class="view-details-btn text-indigo-500 hover:text-indigo-700 dark:text-indigo-400 transition-colors"
+          data-id="${g.id}" title="Ver detalles">
+          <i class="fas fa-eye text-lg"></i>
+        </button>
+      </td>`;
+    tbody.appendChild(row);
+  });
+
+  tbody.querySelectorAll('tr').forEach(row => {
+    row.addEventListener('click', e => {
+      if (e.target.closest('input,button')) return;
+      const id = row.querySelector('.view-details-btn')?.dataset.id;
+      const g  = filteredGroups.find(x => x.id == id);
+      if (g) showDetails(g);
+    });
+  });
+  tbody.querySelectorAll('.selectRecord').forEach(cb => cb.addEventListener('change', updateSelected));
+  tbody.querySelectorAll('.view-details-btn').forEach(btn => btn.addEventListener('click', e => {
+    e.stopPropagation();
+    const g = filteredGroups.find(x => x.id == e.currentTarget.dataset.id);
+    if (g) showDetails(g);
+  }));
+
+  document.getElementById('selectAll').checked =
+    filteredGroups.length > 0 && filteredGroups.every(g => selectedRecords.has(g.id));
+  updateSelected();
+}
+
+function updateSelected() {
+  selectedRecords.clear();
+  document.querySelectorAll('.selectRecord').forEach(cb => {
+    if (cb.checked) selectedRecords.add(cb.dataset.id);
+  });
+  document.getElementById('deleteSelected').disabled = selectedRecords.size === 0;
+  document.getElementById('selectedCount').textContent = selectedRecords.size;
+}
+
+// ── MODAL DETALLE — adaptado a campos nueva PWA ───────────────────
+// ── Obtener caras de competencia — compatible app móvil + PWA vieja ──
+// App móvil: competitoritems[].faces (suma de items)
+// PWA vieja: competitor_faces (campo global del registro)
+function getCompetitorFaces(r) {
+  const items = parseJ(r.competitoritems);
+  if (items.length > 0) {
+    const sumaItems = items
+      .filter(i => !i.sin_stock && i.faces != null)
+      .reduce((s, i) => s + (parseFloat(i.faces) || 0), 0);
+    if (sumaItems > 0) return sumaItems;
+  }
+  // Fallback: campo global del record (registros PWA legacy)
+  const globalVal = parseFloat(r.competitor_faces);
+  return !isNaN(globalVal) ? globalVal : 0;
+}
+
+const fmtProdTxt      = window.captaFmtProdTxt;
+const fmtPresentacion = window.captaFmtProdTxt;
+const parseJ          = window.captaParseJ;
+
+function showDetails(group) {
+  // Usar el primer registro del grupo como representante
+  // Si el grupo tiene múltiples líneas, mostrar todos los registros
+  const records = group._records || [group];
+  const r0      = records[0];
+
+  document.getElementById('modalComercioTitulo').textContent = group.trade || '—';
+  document.getElementById('modalSubtitulo').textContent =
+    `${new Date(group.created_at).toLocaleString('es-ES')} · ${group.promoter_name || '—'} · ${group.state || '—'}${group.zone ? ' / ' + group.zone : ''}`;
+
+  // ── Construir contenido ──────────────────────────────────────────
+  let html = '';
+
+  // 1. Info general
+  const gpsColor = isConfirmed(group) ? '#10B981' : '#EF4444';
+  const gpsText  = isConfirmed(group) ? '✓ Confirmado'
+    : (!group.latitude || !group.longitude) ? 'Sin GPS' : 'No confirmado';
+
+  html += `
+    <div class="modal-section bg-gray-50 dark:bg-slate-700 border border-gray-100 dark:border-slate-600">
+      <p class="modal-section-title text-gray-500 dark:text-gray-400">
+        <i class="fas fa-info-circle mr-1 text-indigo-400"></i>Información general
+      </p>
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        ${[
+          ['Promotor',  group.promoter_name || '—'],
+          ['Comercio',  group.trade || '—'],
+          ['Fecha',     new Date(group.created_at).toLocaleString('es-ES')],
+          ['Estado',    `${group.state || '—'}${group.zone ? ' / ' + group.zone : ''}`],
+          ['GPS',       `<span style="color:${gpsColor};font-weight:700">${gpsText}</span>${group.distance > 0 ? ` · ${group.distance}m` : ''}`],
+          ['Líneas',    group.lineas.length > 0 ? group.lineas.join(', ') : '—'],
+        ].map(([l, v]) => `
+          <div class="bg-white dark:bg-slate-800 rounded-xl p-3 border border-gray-100 dark:border-slate-600">
+            <p class="text-xs text-gray-400 uppercase tracking-wide mb-1">${l}</p>
+            <p class="text-sm font-semibold text-gray-800 dark:text-white">${v}</p>
+          </div>`).join('')}
+      </div>
+    </div>`;
+
+  // 2. Por cada registro del grupo (cada línea)
+  records.forEach(r => {
+    const myItems   = parseJ(r.myitems);
+    const compItems = parseJ(r.competitoritems);
+    const shelf     = r.shelf_meters ? `${parseFloat(r.shelf_meters).toFixed(2)} m` : null;
+    const tipo      = r.p_mayorista === 'Si' ? '🏪 Mayorista' : '🛒 Detal';
+    const cerrado   = r.cliente_cerrado === 'Si';
+
+    // Metros + flags
+    html += `
+      <div class="modal-section bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800">
+        <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+          <p class="modal-section-title text-indigo-600 dark:text-indigo-300 mb-0">
+            <i class="fas fa-layer-group mr-1"></i>Línea: ${r.linea_nombre || '—'}
+          </p>
+          <div class="flex gap-2 flex-wrap">
+            <span class="badge badge-info">${tipo}</span>
+            ${cerrado ? '<span class="badge badge-warning">🔒 Cliente cerrado</span>' : ''}
+            ${shelf   ? `<span class="badge badge-default"><i class="fas fa-ruler-horizontal mr-1"></i>${shelf} anaquel</span>` : ''}
+          </div>
+        </div>`;
+
+    // Nuestros productos
+    if (myItems.length > 0) {
+      html += `
+        <p class="text-xs font-bold text-indigo-700 dark:text-indigo-300 uppercase tracking-wide mb-2">
+          ✅ Nuestros productos
+        </p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+          ${myItems.map(item => {
+            if (item.sin_stock) return `
+              <div class="prod-card border-red-200 dark:border-red-800 bg-white dark:bg-slate-800">
+                <p class="text-sm font-bold text-red-500 mb-1">${fmtPresentacion(item)}</p>
+                <span class="badge badge-destructive">SIN STOCK</span>
+              </div>`;
+
+            const before    = item.faces_before  != null ? parseFloat(item.faces_before)  : null;
+            const after     = item.faces_after   != null ? parseFloat(item.faces_after)   : null;
+            const delta     = (before != null && after != null) ? after - before : null;
+            const dcls      = delta == null ? '' : delta > 0 ? 'delta-pos' : delta < 0 ? 'delta-neg' : 'delta-zer';
+            const stockA    = item.stock_shelf     != null ? item.stock_shelf     : '—';
+            const stockB    = item.stock_warehouse != null ? item.stock_warehouse : '—';
+            const metros    = item.shelf_meters    != null ? `${parseFloat(item.shelf_meters).toFixed(2)}m` : '—';
+            const lowStock  = item.stock_shelf != null && parseFloat(item.stock_shelf) <= 5;
+
+            return `
+              <div class="prod-card ${lowStock ? 'border-red-300 dark:border-red-700' : 'border-green-200 dark:border-green-800'} bg-white dark:bg-slate-800">
+                <p class="text-sm font-bold text-gray-800 dark:text-white mb-2">${fmtPresentacion(item)}</p>
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <p class="text-gray-400 uppercase mb-0.5">Precio</p>
+                    <p class="font-bold text-indigo-600 dark:text-indigo-300">
+                      ${item.price != null ? item.price : '—'} ${item.currency || ''}
+                    </p>
+                  </div>
+                  <div>
+                    <p class="text-gray-400 uppercase mb-0.5">Metros</p>
+                    <p class="font-bold text-gray-700 dark:text-gray-300">${metros}</p>
+                  </div>
+                  <div>
+                    <p class="text-gray-400 uppercase mb-0.5">Stock anaquel</p>
+                    <p class="font-bold ${lowStock ? 'text-red-600' : 'text-gray-700 dark:text-gray-300'}">${stockA}</p>
+                  </div>
+                  <div>
+                    <p class="text-gray-400 uppercase mb-0.5">Stock bodega</p>
+                    <p class="font-bold text-gray-700 dark:text-gray-300">${stockB}</p>
+                  </div>
+                  <div>
+                    <p class="text-gray-400 uppercase mb-0.5">Caras antes</p>
+                    <p class="font-bold text-amber-600">${before != null ? before : '—'}</p>
+                  </div>
+                  <div>
+                    <p class="text-gray-400 uppercase mb-0.5">Caras después</p>
+                    <p class="font-bold text-green-600">${after != null ? after : '—'}</p>
+                  </div>
+                </div>
+                ${delta != null ? `
+                  <div class="mt-2 pt-2 border-t border-gray-100 dark:border-slate-700 flex items-center justify-between">
+                    <span class="text-xs text-gray-400">Ganancia de caras</span>
+                    <span class="badge ${dcls}">${delta >= 0 ? '+' : ''}${delta} cara${Math.abs(delta) !== 1 ? 's' : ''}</span>
+                  </div>` : ''}
+              </div>`;
+          }).join('')}
+        </div>`;
+    }
+
+    // Competencia
+    if (compItems.length > 0) {
+      html += `
+        <p class="text-xs font-bold text-red-600 dark:text-red-400 uppercase tracking-wide mb-2">
+          🏷️ Competencia <span class="font-normal normal-case text-gray-400">(solo total de caras)</span>
+        </p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-2">
+          ${compItems.filter(i => !i.sin_stock).map(item => {
+            const caras = item.faces != null ? item.faces : item.faces_after != null ? item.faces_after : '—';
+            return `
+              <div class="prod-card border-red-200 dark:border-red-800 bg-white dark:bg-slate-800">
+                <p class="text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">${fmtPresentacion(item)}</p>
+                <div class="flex items-center justify-between text-xs">
+                  <div>
+                    <p class="text-gray-400 uppercase mb-0.5">Precio</p>
+                    <p class="font-bold text-gray-600 dark:text-gray-300">
+                      ${item.price != null ? item.price : '—'} ${item.currency || ''}
+                    </p>
+                  </div>
+                  <div class="text-right">
+                    <p class="text-gray-400 uppercase mb-0.5">Caras</p>
+                    <p class="text-xl font-extrabold text-red-500">${caras}</p>
+                  </div>
+                </div>
+              </div>`;
+          }).join('')}
+        </div>`;
+    }
+
+        // Espacios adicionales — grouped by tipo (click → modal con detalle)
+    const espacios = parseJ(r.espacios_adicionales).filter(e => e.activo !== false);
+    if (espacios.length > 0) {
+      const iconMap = { Torre:'🗼', Cabezal:'📐', Paleta:'🪵', 'Exhibición':'🏪' };
+      const byTipo = {};
+      espacios.forEach(e => {
+        if (!byTipo[e.tipo]) byTipo[e.tipo] = [];
+        byTipo[e.tipo].push(e);
+      });
+      html += `
+        <p class="text-xs font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wide mb-2">
+          🏪 Espacios adicionales
+        </p>
+        <div class="flex flex-wrap gap-2 mb-2">
+          ${Object.entries(byTipo).map(([tipo, items]) => {
+            const totalCap = items.reduce((s, e) => s + (e.capacidad != null ? +e.capacidad : 0), 0);
+            const itemsJson = encodeURIComponent(JSON.stringify(items));
+            return `<button type="button"
+              onclick="abrirEspacioModal('${tipo.replace(/'/g,"\\'")}', '${itemsJson}')"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer
+                bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300
+                border border-purple-200 dark:border-purple-700 hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors">
+              ${iconMap[tipo] || '📦'} ${tipo}
+              <span class="font-normal text-purple-400">${items.length} prod.${totalCap > 0 ? ' · ' + totalCap + ' unid.' : ''}</span>
+              <i class="fas fa-eye text-xs opacity-60 ml-1"></i>
+            </button>`;
+          }).join('')}
+        </div>`;
+    }
+    html += `</div>`; // cierre modal-section línea
+  });
+
+  // 3. Fotos (de todos los registros del grupo)
+  const allBefore = records.flatMap(r => parseJ(r.before_photos));
+  const allAfter  = records.flatMap(r => parseJ(r.after_photos));
+
+  const photoSection = (title, photos, tipo) => {
+  if (!photos.length) return `
+    <div class="modal-section bg-gray-50 dark:bg-slate-700 border border-gray-100 dark:border-slate-600">
+      <p class="modal-section-title text-gray-500 dark:text-gray-400">
+        <i class="fas fa-camera mr-1"></i>${title}
+      </p>
+      <p class="text-sm text-gray-400 italic">Sin fotos registradas.</p>
+    </div>`;
+  return `
+    <div class="modal-section bg-gray-50 dark:bg-slate-700 border border-gray-100 dark:border-slate-600">
+      <p class="modal-section-title text-gray-500 dark:text-gray-400">
+        <i class="fas fa-camera mr-1"></i>${title}
+        <span class="font-normal normal-case text-gray-400 ml-1">(${photos.length} foto${photos.length !== 1 ? 's' : ''})</span>
+      </p>
+      <div class="photo-grid">
+        ${photos.map(fn => {
+          let url;
+          if (fn.startsWith('data:')) {
+            url = fn;                                    // base64 directo
+          } else if (fn.startsWith('http')) {
+            url = fn;                                    // ya es URL completa
+          } else {
+            // El archivo está en subcarpeta before/ o after/ dentro del bucket
+            // pero el nombre en DB ya incluye el prefijo "before_" o "after_"
+            url = `${STORAGE_BASE}${tipo}/${fn}`;
+          }
+          return `<img src="${url}" alt="${title}"
+            onclick="showLightbox('${url}')" loading="lazy">`;
+        }).join('')}
+      </div>
+    </div>`;
+};
+
+html += photoSection('📷 Fotos antes',   allBefore, 'before');
+html += photoSection('📷 Fotos después', allAfter,  'after');
+
+  document.getElementById('modalDetailsContent').innerHTML = html;
+  document.getElementById('detailsModal').classList.add('open');
+}
+
+function showLightbox(src) {
+  const lb = document.createElement('div');
+  lb.className = 'lightbox';
+  lb.innerHTML = `<img src="${src}" alt="foto">`;
+  lb.addEventListener('click', () => lb.remove());
+  document.body.appendChild(lb);
+}
+// ── Modal de detalle de espacio adicional (Cabezal, Torre, etc.) ──
+window.abrirEspacioModal = function(tipo, itemsJsonEnc) {
+  const iconMap = { Torre:'🗼', Cabezal:'📐', Paleta:'🪵', 'Exhibición':'🏪' };
+  let items = [];
+  try { items = JSON.parse(decodeURIComponent(itemsJsonEnc)) || []; } catch { items = []; }
+
+  const totalCap = items.reduce((s, e) => s + (e.capacidad != null ? +e.capacidad : 0), 0);
+  const totalUnid = items.length;
+
+  document.getElementById('espacioModalTitulo').innerHTML =
+    `${iconMap[tipo] || '📦'} ${tipo}`;
+  document.getElementById('espacioModalResumen').innerHTML =
+    `<span class="font-semibold text-purple-600 dark:text-purple-300">${totalUnid}</span> producto${totalUnid !== 1 ? 's' : ''}` +
+    (totalCap > 0 ? ` · <span class="font-semibold text-purple-600 dark:text-purple-300">${totalCap}</span> unidades en total` : '');
+
+  const filas = items.map(e => `
+    <tr class="border-b border-gray-100 dark:border-slate-700">
+      <td class="py-2.5 px-3 text-sm font-semibold text-gray-800 dark:text-white">${e.producto || '—'}</td>
+      <td class="py-2.5 px-3 text-center text-sm font-bold text-purple-600 dark:text-purple-300 whitespace-nowrap">
+        ${e.capacidad != null ? `${e.capacidad} unid.` : '—'}
+      </td>
+    </tr>`).join('');
+
+  document.getElementById('espacioModalContent').innerHTML = `
+    <div class="rounded-xl border border-purple-200 dark:border-purple-800 overflow-hidden">
+      <table class="w-full">
+        <thead class="bg-purple-50 dark:bg-purple-900/30">
+          <tr>
+            <th class="py-2 px-3 text-left text-xs font-bold text-purple-700 dark:text-purple-300 uppercase tracking-wide">Producto</th>
+            <th class="py-2 px-3 text-center text-xs font-bold text-purple-700 dark:text-purple-300 uppercase tracking-wide">Capacidad</th>
+          </tr>
+        </thead>
+        <tbody class="bg-white dark:bg-slate-800">${filas}</tbody>
+        ${totalCap > 0 ? `
+          <tfoot class="bg-purple-50 dark:bg-purple-900/30">
+            <tr>
+              <td class="py-2 px-3 text-sm font-bold text-purple-700 dark:text-purple-300">Total</td>
+              <td class="py-2 px-3 text-center text-sm font-extrabold text-purple-700 dark:text-purple-300">${totalCap} unid.</td>
+            </tr>
+          </tfoot>` : ''}
+      </table>
+    </div>`;
+
+  document.getElementById('espacioModal').classList.add('open');
+};
+
+// ── Delete ────────────────────────────────────────────────────────
+async function deleteRecordsSelected(ids) {
+  if (!confirm(`¿Eliminar ${ids.length} registro(s)? Esta acción no se puede deshacer.`)) return;
+  try {
+    const res  = await fetch('/delete_records', {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json' },
+      body: JSON.stringify({ ids, empresa_id: empresaId })
+    });
+    const data = await res.json();
+    if (data.success) { apiCache.clear(); selectedRecords.clear(); await filterRecords(); }
+    else { alert('Error al eliminar.'); }
+  } catch(e) { alert('Error de red: ' + e.message); }
+}
+
+// ── Export XLSX ───────────────────────────────────────────────────
+function exportToXLSX() {
+  if (!filteredGroups.length) { alert('No hay visitas para exportar.'); return; }
+  try {
+    const wb = XLSX.utils.book_new();
+    const rows = filteredGroups.map(g => ({
+      'Fecha': new Date(g.created_at).toLocaleString('es-ES'),
+      'Promotor': g.promoter_name || '',
+      'Comercio': g.trade || '',
+      'Líneas': (g.lineas || []).join(' | '),
+      'Estado': g.state || '',
+      'Zona': g.zone || '',
+      'Distancia (m)': g.distance || '',
+      'GPS': g.verified || '',
+      'Coords Visita': g.latitude ? `${g.latitude},${g.longitude}` : '',
+      'Coords Cliente': g.client_coords || '',
+    }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Visitas');
+    XLSX.writeFile(wb, `capta_visitas_${new Date().toISOString().split('T')[0]}.xlsx`);
+  } catch(e) { console.error(e); alert('Error al exportar.'); }
+}
+
+// ── Export CSV ────────────────────────────────────────────────────
+function exportToCSV() {
+  if (!filteredGroups.length) { alert('No hay visitas para exportar.'); return; }
+  const esc  = t => `"${(t ?? '').toString().replace(/"/g,'""')}"`;
+  const hdrs = ['Fecha','Promotor','Comercio','Líneas','Estado','Zona','Dist.(m)','GPS','Coords Visita','Coords Cliente'];
+  const rows = filteredGroups.map(g => [
+    esc(new Date(g.created_at).toLocaleString('es-ES')),
+    esc(g.promoter_name), esc(g.trade),
+    esc(g.lineas.join(' | ')),
+    esc(g.state), esc(g.zone), g.distance,
+    esc(g.verified),
+    g.latitude  ? `${g.latitude},${g.longitude}` : '',
+    esc(g.client_coords),
+  ].join(','));
+  const csv  = [hdrs.join(','), ...rows].join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type:'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = `capta_visitas_${new Date().toISOString().split('T')[0]}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ── Init ──────────────────────────────────────────────────────────
+async function init() {
+  const today = getTodayMinus4Hours();
+  document.getElementById('dateFrom').value = today;
+  document.getElementById('dateTo').value   = today;
+  populateYears();
+  const year = getCurrentYear();
+  document.getElementById('yearSelect').value = year;
+
+  promoters = []; estados = []; zonas = []; lineas = [];
+  apiCache.clear();
+
+  await populateWeeks(year);
+
+  allRecords = await fetchRecordsFromAPI({ dateFrom: today, dateTo: today, promoterId: 'all' });
+  groupedRecords = agruparVisitas(allRecords);
+  filteredGroups = [...groupedRecords];
+  populateSelects();
+  currentPage = 1;
+  updateDashboard();
+  await updateWeeklyProgress('all');
+
+  // Listeners
+  ['dateFrom','dateTo'].forEach(id => document.getElementById(id).addEventListener('change', filterRecords));
+  document.getElementById('promoter').addEventListener('change', filterRecords);
+  document.getElementById('state').addEventListener('change', updateZoneFilter);
+  document.getElementById('zone').addEventListener('change', filterRecords);
+  document.getElementById('confirmation').addEventListener('change', filterRecords);
+  document.getElementById('linea_filter').addEventListener('change', filterRecords);
+  document.getElementById('cliente_filter').addEventListener('change', filterRecords);
+  document.getElementById('hideNoVisits').addEventListener('change', () =>
+    updateWeeklyProgress(document.getElementById('promoter').value));
+  document.getElementById('yearSelect').addEventListener('change', async e => {
+    await populateWeeks(e.target.value);
+    updateWeeklyProgress(document.getElementById('promoter').value);
+  });
+  document.getElementById('weekSelect').addEventListener('change', () => {
+    if (window._skipWeekChange) return;
+    updateWeeklyProgress(document.getElementById('promoter').value);
+  });
+  document.getElementById('selectAll').addEventListener('change', e => {
+    document.querySelectorAll('.selectRecord').forEach(cb => cb.checked = e.target.checked);
+    updateSelected();
+  });
+  document.getElementById('prevPage').addEventListener('click', () => {
+    if (currentPage > 1) { currentPage--; updateTable(); updatePagination(); }
+  });
+  document.getElementById('nextPage').addEventListener('click', () => {
+    const total = Math.ceil(filteredGroups.length / RECORDS_PER_PAGE);
+    if (currentPage < total) { currentPage++; updateTable(); updatePagination(); }
+  });
+  document.getElementById('deleteSelected').addEventListener('click', () => {
+    if (selectedRecords.size > 0) deleteRecordsSelected(Array.from(selectedRecords));
+  });
+  document.getElementById('exportCSV').addEventListener('click', exportToCSV);
+  document.getElementById('exportXLSX').addEventListener('click', exportToXLSX);
+  document.getElementById('closeDetailsModal').addEventListener('click', () =>
+    document.getElementById('detailsModal').classList.remove('open'));
+  document.getElementById('detailsModal').addEventListener('click', e => {
+    if (e.target === e.currentTarget) document.getElementById('detailsModal').classList.remove('open');
+      document.getElementById('closeEspacioModal').addEventListener('click', () =>
+    document.getElementById('espacioModal').classList.remove('open'));
+  document.getElementById('espacioModal').addEventListener('click', e => {
+    if (e.target === e.currentTarget) document.getElementById('espacioModal').classList.remove('open');
+  });
+  });
+
+  window.onLineaChanged = (lineaId) => {
+    if (lineaId !== undefined) localStorage.setItem('sp-linea', lineaId || '');
+
+    const promoterSel = document.getElementById('promoter');
+    const stateSel    = document.getElementById('state');
+    const zoneSel     = document.getElementById('zone');
+    const lineaSel    = document.getElementById('linea_filter');
+    const clienteSel  = document.getElementById('cliente_filter');
+
+    if (promoterSel) promoterSel.value = 'all';
+    if (stateSel)    stateSel.value    = 'all';
+    if (zoneSel)     { zoneSel.value = 'all'; zoneSel.disabled = true; }
+    if (lineaSel)    lineaSel.value    = lineaId || 'all';
+    if (clienteSel)  clienteSel.value  = 'all';
+
+    apiCache.clear();
+    filterRecords();
+  };
+
+  const savedLinea = localStorage.getItem('sp-linea') || '';
+  if (savedLinea) {
+    const sel = document.getElementById('linea_filter');
+    if (sel) sel.value = savedLinea;
+  }
+}
+
+if (empresaId) init();
+</script>
+</body>
+</html>

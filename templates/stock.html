@@ -1,0 +1,1310 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control de Stock — CAPTA</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+<style>
+  .table-header-sticky th { position:sticky; top:0; z-index:10; background:#F9FAFB; }
+  .dark .table-header-sticky th { background:#334155; color:#e2e8f0; }
+  .pct-bar  { height:6px; border-radius:99px; background:#e5e7eb; overflow:hidden; }
+  .dark .pct-bar { background:#334155; }
+  .pct-fill { height:100%; border-radius:99px; transition:width .5s; }
+  .com-dd   { position:absolute; top:100%; left:0; z-index:200; width:100%; background:white;
+    border:1px solid #e5e7eb; border-radius:8px; max-height:200px; overflow-y:auto;
+    box-shadow:0 8px 24px rgba(0,0,0,.12); }
+  .dark .com-dd { background:#1e293b; border-color:#475569; }
+  .com-dd-item { padding:8px 12px; cursor:pointer; font-size:.83rem; border-bottom:1px solid #f3f4f6; }
+  .com-dd-item:hover { background:#eef2ff; }
+  .dark .com-dd-item:hover { background:#334155; }
+  .row-hover:hover { background:rgba(79,70,229,.04) !important; }
+  .dark .row-hover:hover { background:rgba(139,92,246,.1) !important; }
+  .tab-btn { border-bottom:3px solid transparent; transition:all .15s; }
+  .tab-btn.active { border-bottom-color:#4F46E5; color:#4F46E5; }
+  .dark .tab-btn.active { border-bottom-color:#818CF8; color:#818CF8; }
+  /* Modal */
+  .sp-overlay { display:none; position:fixed; inset:0; z-index:500;
+    background:rgba(0,0,0,.6); align-items:center; justify-content:center; padding:1rem; }
+  .sp-overlay.open { display:flex; }
+  .sp-modal-box { background:white; border-radius:20px; width:min(820px,95vw);
+    max-height:90vh; overflow-y:auto; box-shadow:0 24px 60px rgba(0,0,0,.3); }
+  .dark .sp-modal-box { background:#1e293b; color:#e2e8f0; }
+  /* Urgencia */
+  .urgencia-alta   { background:#FEF2F2; border-left:4px solid #EF4444; }
+  .urgencia-media  { background:#FFFBEB; border-left:4px solid #F59E0B; }
+  .urgencia-baja   { background:#F0FDF4; border-left:4px solid #10B981; }
+  .dark .urgencia-alta  { background:rgba(239,68,68,.1);  border-left-color:#EF4444; }
+  .dark .urgencia-media { background:rgba(245,158,11,.1); border-left-color:#F59E0B; }
+  .dark .urgencia-baja  { background:rgba(16,185,129,.1); border-left-color:#10B981; }
+  select:focus, input:focus { outline:none; box-shadow:0 0 0 3px rgba(79,70,229,.18); border-color:#4F46E5 !important; }
+</style>
+<script>tailwind.config={darkMode:'class'}</script>
+</head>
+<body class="bg-gray-50 dark:bg-slate-900 text-gray-900 dark:text-gray-100 font-sans">
+
+{% include 'navbar.html' %}
+
+<div class="container mx-auto p-4 sm:p-6 lg:p-8">
+
+  <!-- Título -->
+  <div class="flex items-start justify-between mb-6 flex-wrap gap-4">
+    <div>
+      <h1 class="text-3xl font-extrabold text-gray-800 dark:text-white">
+        <i class="fas fa-boxes-stacked mr-2 text-amber-500"></i>Control de Stock
+      </h1>
+      <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+        Análisis de inventario, frecuencia de quiebres y predicción de desabastecimiento.
+      </p>
+    </div>
+    <button onclick="abrirConfigUmbrales()"
+      class="flex items-center gap-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 text-gray-700 dark:text-gray-300 font-semibold py-2 px-4 rounded-lg shadow-sm hover:bg-gray-50 dark:hover:bg-slate-700 transition-all text-sm">
+      <i class="fas fa-sliders text-indigo-500"></i> Umbrales por producto
+    </button>
+  </div>
+
+  <!-- KPIs -->
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-4 text-center border border-gray-100 dark:border-slate-700 shadow-sm">
+      <p class="text-2xl font-extrabold text-amber-500" id="kpiAnaq">—</p>
+      <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Anaquel crítico</p>
+      <div class="pct-bar mt-2"><div class="pct-fill bg-amber-400" id="bAnaq" style="width:0%"></div></div>
+    </div>
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-4 text-center border border-gray-100 dark:border-slate-700 shadow-sm">
+      <p class="text-2xl font-extrabold text-red-600" id="kpiBodega">—</p>
+      <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Bodega baja</p>
+      <div class="pct-bar mt-2"><div class="pct-fill bg-red-500" id="bBodega" style="width:0%"></div></div>
+    </div>
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-4 text-center border border-gray-100 dark:border-slate-700 shadow-sm">
+      <p class="text-2xl font-extrabold text-red-700" id="kpiUrgentes">—</p>
+      <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Alertas urgentes</p>
+      <p class="text-xs text-red-400 mt-1" id="kpiUrgentesHint">quiebre en &lt;7 días</p>
+    </div>
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-4 text-center border border-gray-100 dark:border-slate-700 shadow-sm">
+      <p class="text-2xl font-extrabold text-indigo-600" id="kpiTotal">—</p>
+      <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Registros analizados</p>
+    </div>
+  </div>
+
+  <!-- Filtros -->
+  <div class="bg-white dark:bg-slate-800 shadow-sm rounded-2xl p-5 mb-6 border border-gray-100 dark:border-slate-700">
+    <h2 class="text-base font-bold text-gray-700 dark:text-white mb-4">Filtros</h2>
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-4">
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Desde</label>
+        <input type="date" id="fDesde" onchange="loadData().then(aplicarFiltros)" class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm">
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Hasta</label>
+        <input type="date" id="fHasta" onchange="loadData().then(aplicarFiltros)" class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm">
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Promotor</label>
+        <select id="fPromotor" onchange="aplicarFiltros()" class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm">
+          <option value="">Todos</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Producto</label>
+        <select id="fProducto" onchange="aplicarFiltros()" class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm">
+          <option value="">Todos</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Mostrar</label>
+        <select id="fAlerta" onchange="aplicarFiltros()" class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm">
+          <option value="todos">Todos</option>
+          <option value="anaquel">Anaquel crítico</option>
+          <option value="bodega">Bodega baja</option>
+          <option value="ambos">Ambas alertas</option>
+          <option value="cualquiera">Cualquier alerta</option>
+        </select>
+      </div>
+      <div class="relative" id="comercioWrap">
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Comercio</label>
+        <input type="text" id="fComercio" placeholder="Buscar…"
+          class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm"
+          oninput="buscarComercio(this.value)" autocomplete="off">
+        <input type="hidden" id="fComercioVal">
+        <div id="comercioDD" class="com-dd" style="display:none"></div>
+      </div>
+    </div>
+    <div class="flex gap-3 border-t border-gray-100 dark:border-slate-700 pt-4">
+      <button onclick="aplicarFiltros()"
+        class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-5 rounded-lg shadow transition-all flex items-center gap-2">
+        <i class="fas fa-filter"></i> Aplicar
+      </button>
+      <button onclick="limpiarFiltros()"
+        class="bg-gray-100 hover:bg-gray-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-gray-600 dark:text-gray-300 font-semibold py-2 px-4 rounded-lg transition-all flex items-center gap-2">
+        <i class="fas fa-undo"></i> Limpiar
+      </button>
+      <button onclick="exportXLS()"
+        class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 px-4 rounded-lg transition-all flex items-center gap-2 ml-auto">
+        <i class="fas fa-file-excel"></i> Exportar Excel
+      </button>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="bg-white dark:bg-slate-800 rounded-2xl border border-gray-100 dark:border-slate-700 shadow-sm overflow-hidden mb-6">
+    <div class="flex overflow-x-auto border-b border-gray-100 dark:border-slate-700 px-2 pt-2 gap-1">
+      <button class="tab-btn active px-5 py-3 text-sm font-semibold whitespace-nowrap rounded-t-xl"
+        onclick="switchTab('alertas', this)">
+        <i class="fas fa-bell mr-1.5 text-red-400"></i>Alertas prioritarias
+      </button>
+      <button class="tab-btn px-5 py-3 text-sm font-semibold whitespace-nowrap rounded-t-xl text-gray-500 dark:text-gray-400"
+        onclick="switchTab('comercios', this)">
+        <i class="fas fa-store mr-1.5 text-amber-400"></i>Por comercio
+      </button>
+      <button class="tab-btn px-5 py-3 text-sm font-semibold whitespace-nowrap rounded-t-xl text-gray-500 dark:text-gray-400"
+        onclick="switchTab('productos', this)">
+        <i class="fas fa-box mr-1.5 text-indigo-400"></i>Por producto
+      </button>
+      <button class="tab-btn px-5 py-3 text-sm font-semibold whitespace-nowrap rounded-t-xl text-gray-500 dark:text-gray-400"
+        onclick="switchTab('tendencia', this)">
+        <i class="fas fa-chart-line mr-1.5 text-green-400"></i>Tendencia de stock
+      </button>
+      <button class="tab-btn px-5 py-3 text-sm font-semibold whitespace-nowrap rounded-t-xl text-gray-500 dark:text-gray-400"
+        onclick="switchTab('detalle', this)">
+        <i class="fas fa-list mr-1.5 text-gray-400"></i>Detalle por visita
+      </button>
+    </div>
+
+    <!-- Tab: Alertas prioritarias -->
+    <div id="tab-alertas" class="p-6">
+      <div class="mb-4">
+        <h3 class="text-sm font-bold text-gray-700 dark:text-white mb-1">
+          Comercios con mayor riesgo de desabastecimiento
+        </h3>
+        <p class="text-xs text-gray-400">
+          Ordenados por urgencia — basado en frecuencia de quiebres y tendencia de caída de stock.
+          Haz clic en cualquier tarjeta para ver la tendencia detallada.
+        </p>
+      </div>
+      <div id="panelAlertas" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div class="text-center py-10 text-gray-400 col-span-full">
+          <i class="fas fa-spinner fa-spin text-indigo-400 text-2xl block mb-2"></i>Cargando...
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: Por comercio -->
+    <div id="tab-comercios" class="hidden p-6">
+      <div class="mb-4">
+        <h3 class="text-sm font-bold text-gray-700 dark:text-white mb-1">Frecuencia de quiebres por comercio</h3>
+        <p class="text-xs text-gray-400">¿Dónde me quedo sin stock más seguido? Clic en fila para ver tendencia.</p>
+      </div>
+      <div style="position:relative;height:300px;margin-bottom:24px">
+        <canvas id="chartComerciosFrecuencia"></canvas>
+      </div>
+      <div class="overflow-x-auto rounded-xl border border-gray-100 dark:border-slate-700 max-h-80">
+        <table class="min-w-full divide-y divide-gray-100 dark:divide-slate-700 text-sm">
+          <thead class="table-header-sticky">
+            <tr>
+              <th class="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">#</th>
+              <th class="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Comercio</th>
+              <th class="py-3 px-4 text-center text-xs font-bold text-red-500 uppercase tracking-wider">Quiebres</th>
+              <th class="py-3 px-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Visitas totales</th>
+              <th class="py-3 px-4 text-center text-xs font-bold text-amber-500 uppercase tracking-wider">Sin stock / visita</th>              <th class="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Productos afectados</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyComercio" class="bg-white dark:bg-slate-800 divide-y divide-gray-50 dark:divide-slate-700"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Tab: Por producto -->
+    <div id="tab-productos" class="hidden p-6">
+      <div class="mb-4">
+        <h3 class="text-sm font-bold text-gray-700 dark:text-white mb-1">Frecuencia de quiebres por producto</h3>
+        <p class="text-xs text-gray-400">¿Qué producto tiene más problemas de abastecimiento?</p>
+      </div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div>
+          <p class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Quiebres por producto</p>
+          <div style="position:relative;height:300px"><canvas id="chartProductosFrecuencia"></canvas></div>
+        </div>
+        <div>
+          <p class="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Comercios afectados por producto</p>
+          <div style="position:relative;height:300px"><canvas id="chartProductosComercio"></canvas></div>
+        </div>
+      </div>
+      <div class="overflow-x-auto rounded-xl border border-gray-100 dark:border-slate-700 mt-6 max-h-72">
+        <table class="min-w-full divide-y divide-gray-100 dark:divide-slate-700 text-sm">
+          <thead class="table-header-sticky">
+            <tr>
+              <th class="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Producto</th>
+              <th class="py-3 px-4 text-center text-xs font-bold text-red-500 uppercase tracking-wider">Quiebres</th>
+              <th class="py-3 px-4 text-center text-xs font-bold text-amber-500 uppercase tracking-wider">Comercios afectados</th>
+              <th class="py-3 px-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Stock prom. anaquel</th>
+              <th class="py-3 px-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Stock prom. bodega</th>
+            </tr>
+          </thead>
+          <tbody id="tbodyProducto" class="bg-white dark:bg-slate-800 divide-y divide-gray-50 dark:divide-slate-700"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Tab: Tendencia -->
+    <div id="tab-tendencia" class="hidden p-6">
+      <div class="flex items-center justify-between flex-wrap gap-4 mb-4">
+        <div>
+          <h3 class="text-sm font-bold text-gray-700 dark:text-white mb-1">Tendencia de stock en el tiempo</h3>
+          <p class="text-xs text-gray-400">Selecciona comercio y producto para ver la evolución y predicción</p>
+        </div>
+        <div class="flex gap-3 flex-wrap">
+          <select id="selectorComercioTend"
+            class="h-9 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm min-w-48"
+            onchange="drawChartTendencia()">
+            <option value="">— Selecciona comercio —</option>
+          </select>
+          <select id="selectorProductoTend"
+            class="h-9 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm min-w-44"
+            onchange="drawChartTendencia()">
+            <option value="">— Selecciona producto —</option>
+          </select>
+        </div>
+      </div>
+      <!-- Predicción -->
+      <div id="prediccionBox" class="hidden mb-4 p-4 rounded-2xl border">
+        <div class="flex items-start gap-3">
+          <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-lg" id="prediccionIcon">⚠️</div>
+          <div>
+            <p class="font-bold text-sm" id="prediccionTitulo">—</p>
+            <p class="text-sm mt-1" id="prediccionTexto">—</p>
+          </div>
+        </div>
+      </div>
+      <div style="position:relative;height:320px"><canvas id="chartTendencia"></canvas></div>
+      <p class="text-xs text-gray-400 mt-2 text-center">
+        Línea sólida = stock real · Línea punteada = proyección basada en tendencia
+      </p>
+    </div>
+
+    <!-- Tab: Detalle -->
+    <div id="tab-detalle" class="hidden">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-slate-700">
+        <h3 class="text-sm font-bold text-gray-700 dark:text-white">Detalle por visita</h3>
+        <span id="infoRegistros" class="text-xs font-semibold text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 dark:text-indigo-300 px-3 py-1 rounded-full">—</span>
+      </div>
+      <div class="overflow-x-auto max-h-[60vh]">
+        <table class="min-w-full divide-y divide-gray-100 dark:divide-slate-700">
+          <thead class="table-header-sticky">
+            <tr>
+              <th class="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Fecha</th>
+              <th class="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Promotor</th>
+              <th class="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Comercio</th>
+              <th class="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Producto</th>
+              <th class="py-3 px-4 text-center text-xs font-bold text-amber-500 uppercase tracking-wider">Anaquel</th>
+              <th class="py-3 px-4 text-center text-xs font-bold text-indigo-500 uppercase tracking-wider">Bodega</th>
+              <th class="py-3 px-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Estado</th>
+            </tr>
+          </thead>
+          <tbody id="stockBody" class="bg-white dark:bg-slate-800 divide-y divide-gray-50 dark:divide-slate-700"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /tabs -->
+</div>
+
+<!-- Modal tendencia por comercio+producto (desde alertas) -->
+<div class="sp-overlay" id="modalTendencia">
+  <div class="sp-modal-box">
+    <div class="flex items-center justify-between p-6 border-b border-gray-100 dark:border-slate-700">
+      <div>
+        <h2 class="text-lg font-bold text-gray-900 dark:text-white" id="modalTendTitulo">—</h2>
+        <p class="text-xs text-gray-400 mt-1" id="modalTendSub">—</p>
+      </div>
+      <button onclick="cerrarModal()" class="text-gray-400 hover:text-red-500 text-2xl font-bold leading-none px-2">×</button>
+    </div>
+    <div class="p-6">
+      <div id="modalPrediccionBox" class="hidden mb-4 p-4 rounded-2xl border"></div>
+      <div style="position:relative;height:280px"><canvas id="chartModalTendencia"></canvas></div>
+      <p class="text-xs text-gray-400 mt-2 text-center">
+        Línea sólida = stock real · Línea punteada = proyección
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- Modal umbrales -->
+<div class="sp-overlay" id="umbralModal">
+  <div class="sp-modal-box" style="max-width:680px">
+    <div class="flex items-center justify-between p-6 border-b border-gray-100 dark:border-slate-700">
+      <div>
+        <h2 class="text-lg font-bold text-gray-900 dark:text-white">Umbrales de alerta por producto</h2>
+        <p class="text-xs text-gray-400 mt-1">Define cuándo activar la alerta. Default: anaquel ≤ 3, bodega ≤ 5</p>
+      </div>
+      <button onclick="cerrarModal('umbralModal')" class="text-gray-400 hover:text-red-500 text-2xl font-bold leading-none px-2">×</button>
+    </div>
+    <div class="p-6">
+      <div class="flex gap-3 mb-5">
+        <select id="umbralProductoSel"
+          class="flex-1 h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm">
+          <option value="">— Selecciona un producto —</option>
+        </select>
+        <button onclick="agregarUmbral()"
+          class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg text-sm flex items-center gap-2">
+          <i class="fas fa-plus"></i> Agregar
+        </button>
+      </div>
+      <div class="overflow-x-auto rounded-xl border border-gray-100 dark:border-slate-700">
+        <table class="min-w-full text-sm">
+          <thead><tr class="bg-gray-50 dark:bg-slate-700">
+            <th class="py-2 px-4 text-left text-xs font-bold text-gray-500 uppercase">Producto</th>
+            <th class="py-2 px-4 text-center text-xs font-bold text-amber-500 uppercase">Alerta anaquel (≤)</th>
+            <th class="py-2 px-4 text-center text-xs font-bold text-red-500 uppercase">Alerta bodega (≤)</th>
+            <th class="py-2 px-4 text-center text-xs font-bold text-gray-500 uppercase">Acción</th>
+          </tr></thead>
+          <tbody id="umbralTableBody" class="divide-y divide-gray-100 dark:divide-slate-700 bg-white dark:bg-slate-800"></tbody>
+        </table>
+      </div>
+      <div class="mt-5 flex justify-end">
+        <button onclick="cerrarModal('umbralModal')"
+          class="bg-gray-100 hover:bg-gray-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-gray-600 dark:text-gray-300 font-semibold py-2 px-5 rounded-lg text-sm">
+          Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const DEFAULT_ANAQUEL = 3, DEFAULT_BODEGA = 5;
+const empresaId = localStorage.getItem('empresa_id');
+if (!empresaId) window.location.replace('/');
+
+// ── Estado global ─────────────────────────────────────────────────
+const fmtProdTxt = window.captaFmtProdTxt;
+
+let allData     = [];   // registros raw
+let filas       = [];   // items expandidos
+let umbrales    = {};
+let comercioTimer = null;
+let charts      = {};
+
+// ── Tabs ──────────────────────────────────────────────────────────
+const TABS = ['alertas','comercios','productos','tendencia','detalle'];
+function switchTab(name, btn) {
+  TABS.forEach(t => document.getElementById('tab-'+t).classList.add('hidden'));
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    b.classList.remove('active');
+    b.classList.add('text-gray-500','dark:text-gray-400');
+  });
+  document.getElementById('tab-'+name).classList.remove('hidden');
+  btn.classList.add('active');
+  btn.classList.remove('text-gray-500','dark:text-gray-400');
+}
+
+function fmtDate(s) {
+  return new Date(s).toLocaleDateString('es-ES', { day:'2-digit', month:'short', year:'numeric' });
+}
+function fmtShort(s) {
+  return new Date(s).toLocaleDateString('es-ES', { day:'2-digit', month:'short' });
+}
+function parseJ(v) {
+  if (Array.isArray(v)) return v;
+  try { return JSON.parse(v) || []; } catch { return []; }
+}
+function getUmbral(prod) {
+  return umbrales[prod] || { anaquel: DEFAULT_ANAQUEL, bodega: DEFAULT_BODEGA };
+}
+function chartColors() {
+  const dark = document.documentElement.classList.contains('dark');
+  return { tc: dark ? '#94a3b8' : '#4b5563', gc: dark ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.05)' };
+}
+function destroyChart(id) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+}
+
+// ── Regresión lineal simple ───────────────────────────────────────
+function linearRegression(y) {
+  const n = y.length; if (!n) return { slope:0, intercept:0 };
+  const x = [...Array(n)].map((_,i) => i);
+  const mx = x.reduce((a,b)=>a+b,0)/n;
+  const my = y.reduce((a,b)=>a+b,0)/n;
+  const num = x.reduce((s,xi,i) => s+(xi-mx)*(y[i]-my), 0);
+  const den = x.reduce((s,xi) => s+(xi-mx)**2, 0);
+  const slope = den ? num/den : 0;
+  return { slope, intercept: my - slope*mx };
+}
+
+// ── Días hasta quiebre ────────────────────────────────────────────
+// Basado en la pendiente y el último valor de stock
+function diasHastaQuiebre(stockActual, slope, intervaloDias) {
+  if (!slope || slope >= 0 || !stockActual) return null;
+  // slope está en unidades/visita. Convertir a unidades/día usando el intervalo promedio
+  const slopePerDay = slope / Math.max(intervaloDias, 1);
+  if (slopePerDay >= 0) return null;
+  return Math.max(0, Math.round(stockActual / Math.abs(slopePerDay)));
+}
+
+// ── Catálogos ─────────────────────────────────────────────────────
+async function loadCatalogs() {
+  function waitDb(fn) {
+    if (window.db) { fn(); return; }
+    const t = setInterval(() => { if (window.db) { clearInterval(t); fn(); } }, 50);
+  }
+  waitDb(async () => {
+    const [{ data: promos }, { data: estados }] = await Promise.all([
+      window.db.from('web_promotores').select('promoter_name').eq('empresa_id', empresaId).order('promoter_name'),
+      window.db.from('web_estados').select('nombre').order('nombre'),
+    ]);
+    const ps = document.getElementById('fPromotor');
+    ps.innerHTML = '<option value="">Todos</option>' + (promos || []).map(p => `<option value="${p.promoter_name}">${p.promoter_name}</option>`).join('');
+  });
+}
+
+// ── Cargar umbrales ───────────────────────────────────────────────
+async function loadUmbrales() {
+  function waitDb(fn) {
+    if (window.db) { fn(); return; }
+    const t = setInterval(() => { if (window.db) { clearInterval(t); fn(); } }, 50);
+  }
+  return new Promise(resolve => waitDb(async () => {
+    try {
+      const { data } = await window.db.from('web_stock_umbrales')
+        .select('producto,umbral_anaquel,umbral_bodega').eq('empresa_id', empresaId);
+      umbrales = {};
+      (data || []).forEach(u => { umbrales[u.producto] = { anaquel:u.umbral_anaquel, bodega:u.umbral_bodega }; });
+    } catch { umbrales = {}; }
+    resolve();
+  }));
+}
+
+// ── Cargar datos ──────────────────────────────────────────────────
+async function loadData() {
+  ['panelAlertas','tbodyComercio','tbodyProducto','stockBody'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = `<div class="text-center py-10 text-gray-400 col-span-full">
+      <i class="fas fa-spinner fa-spin text-indigo-400 text-2xl block mb-2"></i>Cargando...</div>`;
+  });
+
+  await loadUmbrales();
+
+  const desde    = document.getElementById('fDesde').value;
+  const hasta    = document.getElementById('fHasta').value;
+  const prom     = document.getElementById('fPromotor').value;
+  const lineaId  = localStorage.getItem('sp-linea') || '';
+
+  function waitDb(fn) {
+    if (window.db) { fn(); return; }
+    const t = setInterval(() => { if (window.db) { clearInterval(t); fn(); } }, 50);
+  }
+
+  await new Promise(resolve => waitDb(async () => {
+    let q = window.db.from('web_precios')
+      .select('id,created_at,trade,promoter_name,state,zone,myitems')
+      .eq('empresa_id', empresaId)
+      .not('myitems','is',null)
+      .order('created_at', { ascending: true }); // asc para tendencia correcta
+
+    if (desde)   q = q.gte('created_at', desde + 'T00:00:00+00:00');
+    if (hasta)   q = q.lte('created_at', hasta + 'T23:59:59+00:00');
+    if (prom)    q = q.eq('promoter_name', prom);
+    if (lineaId) q = q.eq('linea_id', lineaId);
+
+    const { data, error } = await q;
+    if (error) { console.error(error); resolve(); return; }
+    allData = await window.captaEnrichItems(data || [], empresaId, window.db);
+    resolve();
+  }));
+
+  procesarDatos();
+}
+
+// ── Procesar datos ────────────────────────────────────────────────
+function procesarDatos() {
+  filas = [];
+  const productoSet = new Set();
+  const comercioSet = new Set();
+
+  allData.forEach(r => {
+    parseJ(r.myitems).forEach(item => {
+      if (!item.presentation) return;
+      const sa = item.stock_shelf     != null ? parseFloat(item.stock_shelf)     : null;
+      const sb = item.stock_warehouse != null ? parseFloat(item.stock_warehouse) : null;
+      const prod = fmtProdTxt(item);
+      const u = getUmbral(prod);
+      filas.push({
+        fecha:    r.created_at,
+        promotor: r.promoter_name || '—',
+        comercio: r.trade || '—',
+        state:    r.state || '—',
+        zone:     r.zone  || '—',
+        producto: prod,
+        gramaje:  item.gramaje  ?? null,
+        unidad:   item.unidad   ?? null,
+        anaquel:  isNaN(sa) ? null : sa,
+        bodega:   isNaN(sb) ? null : sb,
+        ua: u.anaquel, ub: u.bodega,
+        alertaA: sa != null && !isNaN(sa) && sa <= u.anaquel,
+        alertaB: sb != null && !isNaN(sb) && sb <= u.bodega,
+        sinStock: item.sin_stock === true,
+      });
+      productoSet.add(prod);
+      comercioSet.add(r.trade || '—');
+    });
+  });
+
+  // Poblar selectores
+  const ps = document.getElementById('fProducto');
+  const curP = ps.value;
+  ps.innerHTML = '<option value="">Todos</option>';
+  [...productoSet].sort().forEach(p => ps.innerHTML += `<option value="${p}"${p===curP?' selected':''}>${p}</option>`);
+
+  // Poblar selectores de tendencia
+  const sc = document.getElementById('selectorComercioTend');
+  const curC = sc.value;
+  sc.innerHTML = '<option value="">— Selecciona comercio —</option>';
+  [...comercioSet].sort().forEach(c => sc.innerHTML += `<option value="${c}"${c===curC?' selected':''}>${c}</option>`);
+
+  const sp2 = document.getElementById('selectorProductoTend');
+  const curPT = sp2.value;
+  sp2.innerHTML = '<option value="">— Selecciona producto —</option>';
+  [...productoSet].sort().forEach(p => sp2.innerHTML += `<option value="${p}"${p===curPT?' selected':''}>${p}</option>`);
+
+  // Selector umbral
+  const su = document.getElementById('umbralProductoSel');
+  su.innerHTML = '<option value="">— Selecciona un producto —</option>';
+  [...productoSet].sort().forEach(p => su.innerHTML += `<option value="${p}"${umbrales[p]?' ✓':''} value="${p}">${p}${umbrales[p]?' ✓':''}</option>`);
+
+  aplicarFiltros();
+}
+
+// ── Aplicar filtros ───────────────────────────────────────────────
+function aplicarFiltros() {
+  const promotor = document.getElementById('fPromotor').value;
+  const comercio = document.getElementById('fComercioVal').value;
+  const producto = document.getElementById('fProducto').value;
+  const alerta   = document.getElementById('fAlerta').value;
+
+  let f = filas;
+  if (promotor) f = f.filter(r => r.promotor === promotor);
+  if (comercio) f = f.filter(r => r.comercio === comercio);
+  if (producto) f = f.filter(r => r.producto === producto);
+  if (alerta === 'anaquel')    f = f.filter(r => r.alertaA);
+  if (alerta === 'bodega')     f = f.filter(r => r.alertaB);
+  if (alerta === 'ambos')      f = f.filter(r => r.alertaA && r.alertaB);
+  if (alerta === 'cualquiera') f = f.filter(r => r.alertaA || r.alertaB);
+
+  actualizarKPIs(f);
+  renderAlertas(f);
+  renderTablaComercio(f);
+  renderTablaProducto(f);
+  renderTablaDetalle(f);
+  drawChartTendencia();
+}
+
+// ── KPIs ──────────────────────────────────────────────────────────
+function actualizarKPIs(f) {
+  const cA    = f.filter(r => r.alertaA).length;
+  const cB    = f.filter(r => r.alertaB).length;
+  const total = filas.length;
+  const mx    = Math.max(total, 1);
+
+  document.getElementById('kpiAnaq').textContent   = cA;
+  document.getElementById('kpiBodega').textContent = cB;
+  document.getElementById('kpiTotal').textContent  = total;
+  document.getElementById('bAnaq').style.width     = Math.min(100,(cA/mx)*100)+'%';
+  document.getElementById('bBodega').style.width   = Math.min(100,(cB/mx)*100)+'%';
+  document.getElementById('infoRegistros').textContent = `${f.length} registros`;
+}
+
+// ── Tab Alertas ───────────────────────────────────────────────────
+function renderAlertas(f) {
+  // Agrupar por comercio+producto → calcular tendencia y predicción
+  const grupos = {};
+  f.forEach(r => {
+    if (r.anaquel == null) return;
+    const key = `${r.comercio}|||${r.producto}`;
+    if (!grupos[key]) grupos[key] = {
+      comercio: r.comercio, producto: r.producto,
+            gramaje: r.gramaje, unidad: r.unidad,
+      state: r.state, historial: [], quiebres: 0,
+    };
+    grupos[key].historial.push({ fecha: r.fecha, stock: r.anaquel });
+    if (r.alertaA || r.sinStock) grupos[key].quiebres++;
+  });
+
+  // Calcular urgencia para cada grupo
+  const items = Object.values(grupos).map(g => {
+    const sorted  = [...g.historial].sort((a,b) => new Date(a.fecha) - new Date(b.fecha));
+    const stocks  = sorted.map(h => h.stock);
+    const reg     = linearRegression(stocks);
+    const ultimo  = stocks[stocks.length - 1] ?? 0;
+    // Calcular intervalo promedio entre visitas en días
+    let intervaloDias = 7;
+    if (sorted.length >= 2) {
+      const diffs = [];
+      for (let i=1; i<sorted.length; i++) {
+        diffs.push((new Date(sorted[i].fecha) - new Date(sorted[i-1].fecha)) / 86400000);
+      }
+      intervaloDias = diffs.reduce((a,b)=>a+b,0) / diffs.length;
+    }
+    const dias = diasHastaQuiebre(ultimo, reg.slope, intervaloDias);
+    const urgencia = dias == null ? 'sin_tendencia'
+      : dias <= 7  ? 'alta'
+      : dias <= 21 ? 'media'
+      : 'baja';
+    return { ...g, sorted, stocks, reg, ultimo, dias, urgencia, intervaloDias };
+  });
+
+  // Ordenar: alta urgencia primero, luego por días asc
+  items.sort((a,b) => {
+    const ord = { alta:0, media:1, baja:2, sin_tendencia:3 };
+    if (ord[a.urgencia] !== ord[b.urgencia]) return ord[a.urgencia] - ord[b.urgencia];
+    if (a.dias != null && b.dias != null) return a.dias - b.dias;
+    return b.quiebres - a.quiebres;
+  });
+
+  // KPI urgentes
+  document.getElementById('kpiUrgentes').textContent = items.filter(i => i.urgencia === 'alta').length;
+
+  const container = document.getElementById('panelAlertas');
+  if (!items.length) {
+    container.innerHTML = `<div class="text-center py-10 text-gray-400 col-span-full">
+      <i class="fas fa-check-circle text-green-400 text-3xl block mb-2"></i>
+      Sin alertas para los filtros aplicados
+    </div>`;
+    return;
+  }
+
+  const iconMap  = { alta:'🔴', media:'🟡', baja:'🟢', sin_tendencia:'⚪' };
+  const clsMap   = { alta:'urgencia-alta', media:'urgencia-media', baja:'urgencia-baja', sin_tendencia:'' };
+  const lblMap   = { alta:'URGENTE', media:'ATENCIÓN', baja:'OK', sin_tendencia:'Sin tendencia' };
+  const colMap   = { alta:'text-red-600', media:'text-amber-600', baja:'text-green-600', sin_tendencia:'text-gray-400' };
+
+  container.innerHTML = items.slice(0, 24).map(item => {
+    const diasTxt = item.dias != null
+      ? `<span class="font-bold ${colMap[item.urgencia]}">~${item.dias} días para quiebre</span>`
+      : item.reg.slope >= 0
+      ? '<span class="text-green-600 font-semibold">Stock estable o creciendo</span>'
+      : '<span class="text-gray-400">Datos insuficientes</span>';
+
+    const tendTxt = item.reg.slope < -0.5
+      ? `↓ Bajando ~${Math.abs(item.reg.slope).toFixed(1)} unid/visita`
+      : item.reg.slope > 0.5
+      ? `↑ Subiendo ~${item.reg.slope.toFixed(1)} unid/visita`
+      : '→ Estable';
+
+    return `
+      <div class="rounded-2xl p-4 border cursor-pointer hover:shadow-md transition-shadow ${clsMap[item.urgencia]} dark:border-slate-600"
+        onclick="abrirTendenciaModal('${item.comercio.replace(/'/g,"\\'")}', '${item.producto.replace(/'/g,"\\'")}')">
+        <div class="flex items-start justify-between mb-2">
+          <span class="text-lg">${iconMap[item.urgencia]}</span>
+          <span class="text-xs font-bold px-2 py-0.5 rounded-full
+            ${item.urgencia==='alta' ? 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300'
+            : item.urgencia==='media' ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-300'
+            : item.urgencia==='baja' ? 'bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-300'
+            : 'bg-gray-100 text-gray-500'}">
+            ${lblMap[item.urgencia]}
+          </span>
+        </div>
+        <p class="font-bold text-sm text-gray-800 dark:text-white truncate">${item.comercio}</p>
+        <p class="text-xs text-indigo-600 dark:text-indigo-300 font-semibold mt-0.5">${fmtProdTxt({presentation:item.producto,gramaje:item.gramaje,unidad:item.unidad})}</p>
+        <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">${item.state}</p>
+        <div class="mt-3 pt-3 border-t border-black/5 dark:border-white/10 space-y-1">
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-gray-500">Stock actual</span>
+            <span class="font-bold text-gray-700 dark:text-gray-200">${item.ultimo} unid.</span>
+          </div>
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-gray-500">Tendencia</span>
+            <span class="font-semibold text-gray-600 dark:text-gray-300">${tendTxt}</span>
+          </div>
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-gray-500">Predicción</span>
+            <span>${diasTxt}</span>
+          </div>
+          <div class="flex items-center justify-between text-xs">
+            <span class="text-gray-500">Quiebres registrados</span>
+            <span class="font-bold ${item.quiebres > 0 ? 'text-red-500' : 'text-gray-400'}">${item.quiebres}</span>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ── Tab Comercios ─────────────────────────────────────────────────
+function renderTablaComercio(f) {
+  const { tc, gc } = chartColors();
+  const byC = {};
+  f.forEach(r => {
+    if (!byC[r.comercio]) byC[r.comercio] = { quiebres:0, visitas:new Set(), prods:new Set() };
+    byC[r.comercio].visitas.add(r.fecha.split('T')[0]);
+    byC[r.comercio].prods.add(r.producto);
+    if (r.alertaA || r.alertaB || r.sinStock) byC[r.comercio].quiebres++;
+  });
+
+  const sorted = Object.entries(byC)
+    .map(([k,v]) => ({ comercio:k, quiebres:v.quiebres, visitas:v.visitas.size, prods:[...v.prods] }))
+    .sort((a,b) => b.quiebres - a.quiebres);
+
+  // Gráfico
+  const top = sorted.slice(0,15);
+  destroyChart('chartComerciosFrecuencia');
+  if (top.length) {
+    charts['chartComerciosFrecuencia'] = new Chart(
+      document.getElementById('chartComerciosFrecuencia').getContext('2d'), {
+      type:'bar',
+      data: {
+        labels: top.map(r => r.comercio.length>18?r.comercio.slice(0,16)+'…':r.comercio),
+        datasets: [{
+          label:'Quiebres de stock',
+          data: top.map(r => r.quiebres),
+          backgroundColor: top.map(r => {
+            const tasa = r.visitas ? r.quiebres/r.visitas : 0;
+            return tasa > .5 ? 'rgba(239,68,68,.8)' : tasa > .25 ? 'rgba(245,158,11,.8)' : 'rgba(79,70,229,.75)';
+          }),
+          borderRadius:4, borderSkipped:false,
+        }]
+      },
+      options: { responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:false} },
+        scales:{ x:{ticks:{color:tc,font:{size:10}},grid:{color:gc}},
+                 y:{ticks:{color:tc,font:{size:10}},grid:{color:gc}} } }
+    });
+  }
+
+  // Tabla
+  const tbody = document.getElementById('tbodyComercio');
+  if (!sorted.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-gray-400">Sin datos</td></tr>';
+    return;
+  }
+  tbody.innerHTML = sorted.map((r, idx) => {
+    const promSinStock = r.visitas ? (r.quiebres / r.visitas).toFixed(1) : '0';
+    const promNum      = parseFloat(promSinStock);
+    const tasaCls      = promNum > 3 ? 'text-red-600 font-bold' : promNum > 1.5 ? 'text-amber-600 font-bold' : 'text-green-600';
+    return `<tr class="row-hover cursor-pointer"
+      onclick="abrirTendenciaModal('${r.comercio.replace(/'/g,"\\'")}', '')">
+      <td class="py-3 px-4 text-sm font-bold text-gray-400">${idx+1}</td>
+      <td class="py-3 px-4 font-semibold text-gray-800 dark:text-white">${r.comercio}</td>
+      <td class="py-3 px-4 text-center font-extrabold text-red-500">${r.quiebres}</td>
+      <td class="py-3 px-4 text-center text-gray-500">${r.visitas}</td>
+      <td class="py-3 px-4 text-center ${tasaCls}">${promSinStock} prod/visita</td>
+            <td class="py-3 px-4 text-xs text-gray-700 dark:text-gray-200 font-medium">${r.prods.slice(0,3).join(', ')}${r.prods.length>3?'…':''}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Tab Productos ─────────────────────────────────────────────────
+function renderTablaProducto(f) {
+  const { tc, gc } = chartColors();
+  const byP = {};
+  f.forEach(r => {
+    if (!byP[r.producto]) byP[r.producto] = {
+      quiebres:0, comercios:new Set(), stocksA:[], stocksB:[], gramaje:r.gramaje||null, unidad:r.unidad||null };
+    if (r.alertaA || r.alertaB || r.sinStock) byP[r.producto].quiebres++;
+    byP[r.producto].comercios.add(r.comercio);
+    if (r.anaquel != null) byP[r.producto].stocksA.push(r.anaquel);
+    if (r.bodega  != null) byP[r.producto].stocksB.push(r.bodega);
+  });
+
+  const avg = arr => arr.length ? (arr.reduce((a,b)=>a+b,0)/arr.length) : null;
+  const sorted = Object.entries(byP)
+    .map(([k,v]) => ({ prod:k, quiebres:v.quiebres, comercios:v.comercios.size,
+      avgA:avg(v.stocksA), avgB:avg(v.stocksB) }))
+    .sort((a,b) => b.quiebres - a.quiebres);
+
+  // Gráfico quiebres
+  const top = sorted.slice(0,12);
+  destroyChart('chartProductosFrecuencia');
+  if (top.length) {
+    charts['chartProductosFrecuencia'] = new Chart(
+      document.getElementById('chartProductosFrecuencia').getContext('2d'), {
+      type:'bar', indexAxis:'y',
+      data: {
+        labels: top.map(r => r.prod.length>20?r.prod.slice(0,18)+'…':r.prod),
+        datasets: [{ label:'Quiebres', data:top.map(r=>r.quiebres),
+          backgroundColor:'rgba(239,68,68,.75)', borderRadius:4, borderSkipped:false }]
+      },
+      options: { responsive:true, maintainAspectRatio:false,
+        plugins:{legend:{display:false}},
+        scales:{ x:{ticks:{color:tc,font:{size:10}},grid:{color:gc}},
+                 y:{ticks:{color:tc,font:{size:10}},grid:{display:false}} } }
+    });
+  }
+
+  // Gráfico comercios afectados
+  destroyChart('chartProductosComercio');
+  if (top.length) {
+    charts['chartProductosComercio'] = new Chart(
+      document.getElementById('chartProductosComercio').getContext('2d'), {
+      type:'bar', indexAxis:'y',
+      data: {
+        labels: top.map(r => r.prod.length>20?r.prod.slice(0,18)+'…':r.prod),
+        datasets: [{ label:'Comercios afectados', data:top.map(r=>r.comercios),
+          backgroundColor:'rgba(245,158,11,.75)', borderRadius:4, borderSkipped:false }]
+      },
+      options: { responsive:true, maintainAspectRatio:false,
+        plugins:{legend:{display:false}},
+        scales:{ x:{ticks:{color:tc,font:{size:10}},grid:{color:gc}},
+                 y:{ticks:{color:tc,font:{size:10}},grid:{display:false}} } }
+    });
+  }
+
+  // Tabla
+  const tbody = document.getElementById('tbodyProducto');
+  if (!sorted.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center py-8 text-gray-400">Sin datos</td></tr>';
+    return;
+  }
+  tbody.innerHTML = sorted.map(r => {
+    const fmtStock = v => v != null ? v.toFixed(1) : '—';
+    const stockCls = r.avgA != null && r.avgA <= DEFAULT_ANAQUEL*2 ? 'text-red-600 font-bold' : 'text-gray-600 dark:text-gray-300';
+    return `<tr class="row-hover">
+      <td class="py-3 px-4 font-semibold text-gray-800 dark:text-white">${fmtProdTxt({presentation:r.prod,gramaje:r.gramaje,unidad:r.unidad})}</td>
+      <td class="py-3 px-4 text-center font-extrabold text-red-500">${r.quiebres}</td>
+      <td class="py-3 px-4 text-center font-bold text-amber-600">${r.comercios}</td>
+      <td class="py-3 px-4 text-center ${stockCls}">${fmtStock(r.avgA)}</td>
+      <td class="py-3 px-4 text-center text-gray-500 dark:text-gray-400">${fmtStock(r.avgB)}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Tab Tendencia ─────────────────────────────────────────────────
+function drawChartTendencia(comercioForzado, productoForzado, canvasId = 'chartTendencia', modalPredBox = null) {
+  const comercio = comercioForzado || document.getElementById('selectorComercioTend').value;
+  const producto = productoForzado || document.getElementById('selectorProductoTend').value;
+
+  destroyChart(canvasId);
+
+  if (!comercio || !producto) return;
+
+  const { tc, gc } = chartColors();
+
+  // Filtrar historial de este comercio+producto
+  const historial = filas
+    .filter(r => r.comercio === comercio && r.producto === producto && r.anaquel != null)
+    .sort((a,b) => new Date(a.fecha) - new Date(b.fecha));
+
+  if (!historial.length) return;
+
+  const labels  = historial.map(h => fmtShort(h.fecha));
+  const stocks  = historial.map(h => h.anaquel);
+  const reg     = linearRegression(stocks);
+
+  // Calcular intervalo promedio
+  let intervaloDias = 7;
+  if (historial.length >= 2) {
+    const diffs = [];
+    for (let i=1; i<historial.length; i++) {
+      diffs.push((new Date(historial[i].fecha) - new Date(historial[i-1].fecha)) / 86400000);
+    }
+    intervaloDias = diffs.reduce((a,b)=>a+b,0) / diffs.length;
+  }
+
+  const ultimo = stocks[stocks.length - 1];
+  const umbral = getUmbral(producto).anaquel;
+
+  // Proyección — 5 puntos futuros
+  const proyFechas = [];
+  const proyStocks = [];
+  for (let i=1; i<=5; i++) {
+    const d = new Date(historial[historial.length-1].fecha);
+    d.setDate(d.getDate() + Math.round(intervaloDias * i));
+    proyFechas.push(fmtShort(d.toISOString()));
+    proyStocks.push(Math.max(0, +(reg.intercept + reg.slope*(stocks.length + i - 1)).toFixed(1)));
+  }
+
+  const allLabels = [...labels, ...proyFechas];
+  const realData  = [...stocks, ...Array(5).fill(null)];
+  const proyData  = [...Array(stocks.length - 1).fill(null), ultimo, ...proyStocks];
+  const umbralData = Array(allLabels.length).fill(umbral);
+
+  // Predicción texto
+  const dias = diasHastaQuiebre(ultimo, reg.slope, intervaloDias);
+  const predBox = modalPredBox || document.getElementById('prediccionBox');
+
+  if (predBox) {
+    if (dias != null && dias <= 30) {
+      const urgencia = dias <= 7 ? 'alta' : dias <= 21 ? 'media' : 'baja';
+      const clsMap   = {
+        alta:  'bg-red-50  dark:bg-red-900/20  border-red-200  dark:border-red-700',
+        media: 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700',
+        baja:  'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700',
+      };
+      const iconMap  = { alta:'🔴', media:'🟡', baja:'🟢' };
+      const titMap   = {
+        alta:  '⚠️ Quiebre inminente',
+        media: '📋 Atención requerida',
+        baja:  '✅ Stock con margen',
+      };
+      const txtMap   = {
+        alta:  `A este ritmo, <strong>${producto}</strong> en <strong>${comercio}</strong> se quedará sin stock en aproximadamente <strong>${dias} día${dias!==1?'s':''}</strong>. Se recomienda reabastecer de inmediato.`,
+        media: `El stock de <strong>${producto}</strong> en <strong>${comercio}</strong> seguirá bajando. Proyección de quiebre en ~<strong>${dias} días</strong>. Planifica el reabastecimiento.`,
+        baja:  `El stock de <strong>${producto}</strong> en <strong>${comercio}</strong> tiene margen de ~<strong>${dias} días</strong> a este ritmo de consumo.`,
+      };
+      if (modalPredBox) {
+        predBox.className = `p-4 rounded-2xl border ${clsMap[urgencia]}`;
+        predBox.innerHTML = `<div class="flex items-start gap-3">
+          <span class="text-xl flex-shrink-0">${iconMap[urgencia]}</span>
+          <div>
+            <p class="font-bold text-sm mb-1">${titMap[urgencia]}</p>
+            <p class="text-sm">${txtMap[urgencia]}</p>
+          </div>
+        </div>`;
+      } else {
+        predBox.className = `mb-4 p-4 rounded-2xl border ${clsMap[urgencia]}`;
+        document.getElementById('prediccionIcon').textContent = iconMap[urgencia];
+        document.getElementById('prediccionTitulo').textContent = titMap[urgencia].replace(/[🔴🟡🟢⚠️📋✅]/g,'').trim();
+        document.getElementById('prediccionTexto').innerHTML = txtMap[urgencia];
+      }
+      predBox.classList.remove('hidden');
+    } else {
+      predBox.classList.add('hidden');
+    }
+  }
+
+  charts[canvasId] = new Chart(document.getElementById(canvasId).getContext('2d'), {
+    type:'line',
+    data: {
+      labels: allLabels,
+      datasets: [
+        { label:'Stock real (anaquel)',
+          data: realData,
+          borderColor:'#4F46E5', backgroundColor:'rgba(79,70,229,.1)',
+          tension:.3, pointRadius:5, pointBackgroundColor:'#4F46E5', fill:true,
+          spanGaps:false },
+        { label:'Proyección',
+          data: proyData,
+          borderColor:'rgba(239,68,68,.8)', backgroundColor:'transparent',
+          tension:.3, pointRadius:4, pointBackgroundColor:'rgba(239,68,68,.8)',
+          borderDash:[6,4], spanGaps:false },
+        { label:`Umbral alerta (${umbral})`,
+          data: umbralData,
+          borderColor:'rgba(245,158,11,.7)', backgroundColor:'transparent',
+          borderDash:[3,3], pointRadius:0, borderWidth:2 },
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins: {
+        legend:{ display:true, position:'top', labels:{ color:tc, font:{size:11}, boxWidth:12 } },
+        tooltip:{ callbacks:{ label: item => `  ${item.dataset.label}: ${item.raw} unid.` }}
+      },
+      scales: {
+        x:{ ticks:{color:tc,font:{size:10}}, grid:{color:gc} },
+        y:{ min:0, ticks:{color:tc,font:{size:10},callback:v=>v+' u.'}, grid:{color:gc} },
+      }
+    }
+  });
+}
+
+// ── Modal tendencia (desde alertas/tabla) ─────────────────────────
+function abrirTendenciaModal(comercio, producto) {
+  document.getElementById('modalTendTitulo').textContent = comercio;
+  document.getElementById('modalTendSub').textContent    = producto || 'Todos los productos';
+
+  // Si no viene producto, usar el primero disponible de ese comercio
+  let prod = producto;
+  if (!prod) {
+    const firstProd = filas.find(r => r.comercio === comercio)?.producto;
+    prod = firstProd || '';
+  }
+
+  const predBox = document.getElementById('modalPrediccionBox');
+  predBox.className = 'hidden mb-4 p-4 rounded-2xl border';
+  predBox.innerHTML = '';
+
+  destroyChart('chartModalTendencia');
+  document.getElementById('modalTendencia').classList.add('open');
+
+  // Pequeño delay para que el canvas sea visible
+  setTimeout(() => {
+    drawChartTendencia(comercio, prod, 'chartModalTendencia', predBox);
+  }, 100);
+}
+
+function cerrarModal(id = 'modalTendencia') {
+  document.getElementById(id).classList.remove('open');
+}
+document.getElementById('modalTendencia').addEventListener('click', e => {
+  if (e.target === e.currentTarget) cerrarModal('modalTendencia');
+});
+
+// ── Tab Detalle ───────────────────────────────────────────────────
+function renderTablaDetalle(f) {
+  const tbody = document.getElementById('stockBody');
+  if (!f.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-10 text-gray-400">Sin datos</td></tr>';
+    return;
+  }
+
+  const badgeAnaq = (n, ua) => {
+    if (n == null) return '<span class="text-gray-300">—</span>';
+    if (n <= ua)   return `<span class="inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300">${n}</span>`;
+    if (n <= ua*2) return `<span class="inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-300">${n}</span>`;
+    return `<span class="inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-300">${n}</span>`;
+  };
+  const estadoBadge = (r) => {
+    if (r.sinStock)            return '<span class="inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-600">SIN STOCK</span>';
+    if (r.alertaA && r.alertaB) return '<span class="inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-600">⚠ Ambos bajos</span>';
+    if (r.alertaA)              return '<span class="inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-600">Anaquel bajo</span>';
+    if (r.alertaB)              return '<span class="inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-600">Bodega baja</span>';
+    return '<span class="inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-green-100 text-green-600">Normal</span>';
+  };
+
+  // Mostrar solo los más recientes primero
+  const sorted = [...f].sort((a,b) => new Date(b.fecha) - new Date(a.fecha));
+  tbody.innerHTML = sorted.slice(0, 300).map(r => `
+    <tr class="row-hover">
+      <td class="py-3 px-4 text-xs font-semibold text-gray-600 dark:text-gray-300 whitespace-nowrap">${fmtDate(r.fecha)}</td>
+      <td class="py-3 px-4 text-xs text-indigo-600 dark:text-indigo-400 font-medium">${r.promotor}</td>
+      <td class="py-3 px-4 text-sm font-semibold text-gray-800 dark:text-white">${r.comercio}</td>
+      <td class="py-3 px-4 text-sm text-gray-700 dark:text-gray-300">
+        ${fmtProdTxt(r)}
+        <div class="text-xs text-gray-400 font-normal">umbral: anaquel≤${r.ua} · bodega≤${r.ub}</div>
+      </td>
+      <td class="py-3 px-4 text-center">${badgeAnaq(r.anaquel, r.ua)}</td>
+      <td class="py-3 px-4 text-center">${badgeAnaq(r.bodega, r.ub)}</td>
+      <td class="py-3 px-4 text-center">${estadoBadge(r)}</td>
+    </tr>`).join('');
+}
+
+// ── Búsqueda comercio ─────────────────────────────────────────────
+function buscarComercio(term) {
+  clearTimeout(comercioTimer);
+  document.getElementById('fComercioVal').value = '';
+  const dd = document.getElementById('comercioDD');
+  if (!term.trim()) { dd.style.display = 'none'; return; }
+  comercioTimer = setTimeout(() => {
+    const matches = [...new Set(filas.map(r=>r.comercio))]
+      .filter(c => c.toLowerCase().includes(term.toLowerCase())).sort().slice(0,15);
+    if (!matches.length) { dd.style.display = 'none'; return; }
+    dd.innerHTML = matches.map(c =>
+      `<div class="com-dd-item" onmousedown="selecComercio('${c.replace(/'/g,"\\'")}')">
+        <i class="fas fa-store mr-2 text-indigo-400 text-xs"></i>${c}
+      </div>`).join('');
+    dd.style.display = 'block';
+  }, 200);
+}
+function selecComercio(val) {
+  document.getElementById('fComercio').value    = val;
+  document.getElementById('fComercioVal').value = val;
+  document.getElementById('comercioDD').style.display = 'none';
+}
+document.addEventListener('click', e => {
+  if (!document.getElementById('comercioWrap')?.contains(e.target))
+    document.getElementById('comercioDD').style.display = 'none';
+});
+
+function limpiarFiltros() {
+  setDefaultDates();
+  document.getElementById('fPromotor').value  = '';
+  document.getElementById('fProducto').value  = '';
+  document.getElementById('fAlerta').value    = 'todos';
+  document.getElementById('fComercio').value  = '';
+  document.getElementById('fComercioVal').value = '';
+  loadData().then(aplicarFiltros);
+}
+
+// ── Umbrales ──────────────────────────────────────────────────────
+function abrirConfigUmbrales() {
+  renderUmbralTable();
+  document.getElementById('umbralModal').classList.add('open');
+}
+document.getElementById('umbralModal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) cerrarModal('umbralModal');
+});
+
+function renderUmbralTable() {
+  const tbody  = document.getElementById('umbralTableBody');
+  const entries = Object.entries(umbrales);
+  if (!entries.length) {
+    tbody.innerHTML = `<tr><td colspan="4" class="text-center py-6 text-gray-400 text-sm">
+      Sin umbrales configurados — se usan los valores por defecto
+    </td></tr>`;
+    return;
+  }
+  tbody.innerHTML = entries.sort((a,b)=>a[0].localeCompare(b[0])).map(([prod, u]) => `
+    <tr>
+      <td class="py-3 px-4 text-sm font-semibold text-gray-800 dark:text-white">${prod}</td>
+      <td class="py-3 px-4 text-center">
+        <input type="number" min="1" max="99" value="${u.anaquel}"
+          class="w-16 h-8 border border-amber-300 dark:border-amber-700 dark:bg-slate-700 dark:text-white rounded-lg px-2 text-center text-sm font-bold text-amber-700"
+          onchange="guardarUmbral('${prod}', this.value, null)">
+      </td>
+      <td class="py-3 px-4 text-center">
+        <input type="number" min="1" max="999" value="${u.bodega}"
+          class="w-16 h-8 border border-red-300 dark:border-red-700 dark:bg-slate-700 dark:text-white rounded-lg px-2 text-center text-sm font-bold text-red-700"
+          onchange="guardarUmbral('${prod}', null, this.value)">
+      </td>
+      <td class="py-3 px-4 text-center">
+        <button onclick="eliminarUmbral('${prod}')" class="text-red-400 hover:text-red-600 text-sm" title="Eliminar">
+          <i class="fas fa-trash"></i>
+        </button>
+      </td>
+    </tr>`).join('');
+}
+
+async function agregarUmbral() {
+  const prod = document.getElementById('umbralProductoSel').value;
+  if (!prod) { captaToast('Selecciona un producto primero','warn'); return; }
+  if (umbrales[prod]) { captaToast('Ya tiene umbral configurado','warn'); return; }
+  umbrales[prod] = { anaquel:DEFAULT_ANAQUEL, bodega:DEFAULT_BODEGA };
+  await upsertUmbral(prod, DEFAULT_ANAQUEL, DEFAULT_BODEGA);
+  renderUmbralTable();
+  captaToast(`Umbral creado para ${prod}`,'success');
+}
+
+async function guardarUmbral(prod, newAnaq, newBod) {
+  const u = umbrales[prod] || { anaquel:DEFAULT_ANAQUEL, bodega:DEFAULT_BODEGA };
+  if (newAnaq !== null) u.anaquel = parseInt(newAnaq);
+  if (newBod  !== null) u.bodega  = parseInt(newBod);
+  umbrales[prod] = u;
+  await upsertUmbral(prod, u.anaquel, u.bodega);
+  filas.forEach(f => {
+    if (f.producto !== prod) return;
+    f.ua = u.anaquel; f.ub = u.bodega;
+    f.alertaA = f.anaquel != null && f.anaquel <= u.anaquel;
+    f.alertaB = f.bodega  != null && f.bodega  <= u.bodega;
+  });
+  captaToast('Umbral actualizado','success');
+}
+
+async function eliminarUmbral(prod) {
+  delete umbrales[prod];
+  try {
+    function waitDb(fn) { if (window.db){fn();return;} const t=setInterval(()=>{if(window.db){clearInterval(t);fn();}},50); }
+    await new Promise(r => waitDb(async () => {
+      await window.db.from('web_stock_umbrales').delete()
+        .eq('empresa_id', empresaId).eq('producto', prod);
+      r();
+    }));
+  } catch {}
+  filas.forEach(f => {
+    if (f.producto !== prod) return;
+    f.ua = DEFAULT_ANAQUEL; f.ub = DEFAULT_BODEGA;
+    f.alertaA = f.anaquel != null && f.anaquel <= DEFAULT_ANAQUEL;
+    f.alertaB = f.bodega  != null && f.bodega  <= DEFAULT_BODEGA;
+  });
+  renderUmbralTable();
+  captaToast(`Umbral eliminado — usando valores por defecto`,'info');
+}
+
+async function upsertUmbral(prod, ua, ub) {
+  function waitDb(fn) { if(window.db){fn();return;}const t=setInterval(()=>{if(window.db){clearInterval(t);fn();}},50); }
+  await new Promise(r => waitDb(async () => {
+    try {
+      await window.db.from('web_stock_umbrales').upsert({
+        empresa_id: empresaId, producto: prod,
+        umbral_anaquel: ua, umbral_bodega: ub,
+        updated_at: new Date().toISOString()
+      }, { onConflict:'empresa_id,producto' });
+    } catch(e) { console.warn('upsert umbral:', e); }
+    r();
+  }));
+}
+
+// ── Init ──────────────────────────────────────────────────────────
+function setDefaultDates() {
+  const hoy = new Date().toISOString().split('T')[0];
+  document.getElementById('fHasta').value = hoy;
+  document.getElementById('fDesde').value = hoy;
+}
+
+function exportXLS() {
+  try {
+    const wb = XLSX.utils.book_new();
+    const desde = document.getElementById('fDesde')?.value || '';
+    const hasta  = document.getElementById('fHasta')?.value  || '';
+
+    // Obtener filas filtradas igual que aplicarFiltros
+    const promotor = document.getElementById('fPromotor').value;
+    const comercio = document.getElementById('fComercioVal').value;
+    const producto = document.getElementById('fProducto').value;
+    const alerta   = document.getElementById('fAlerta').value;
+    let f = filas;
+    if (promotor) f = f.filter(r => r.promotor === promotor);
+    if (comercio) f = f.filter(r => r.comercio === comercio);
+    if (producto) f = f.filter(r => r.producto === producto);
+    if (alerta === 'anaquel')    f = f.filter(r => r.alertaA);
+    if (alerta === 'bodega')     f = f.filter(r => r.alertaB);
+    if (alerta === 'ambos')      f = f.filter(r => r.alertaA && r.alertaB);
+    if (alerta === 'cualquiera') f = f.filter(r => r.alertaA || r.alertaB);
+
+    // Hoja 1: Alertas Urgentes (agrupado por comercio+producto)
+    const visitasPorTrade = {};
+    filas.forEach(r => { visitasPorTrade[r.comercio] = (visitasPorTrade[r.comercio] || 0) + 1; });
+    const byGrupo = {};
+    f.forEach(r => {
+      const k = r.comercio + '|||' + r.producto;
+      if (!byGrupo[k]) byGrupo[k] = { Comercio: r.comercio, Estado: r.state, Producto: r.producto, Quiebres: 0, _visitas: visitasPorTrade[r.comercio] || 1 };
+      if (r.alertaA || r.sinStock) byGrupo[k].Quiebres++;
+    });
+    const alertas = Object.values(byGrupo).filter(x => x.Quiebres > 0).map(x => {
+      const freq = Math.round(x.Quiebres / x._visitas * 100);
+      return { Comercio: x.Comercio, Estado: x.Estado, Producto: x.Producto, Quiebres: x.Quiebres, Visitas: x._visitas, 'Frecuencia %': freq, Prioridad: freq >= 50 ? 'CRÍTICO' : freq >= 25 ? 'ALTO' : 'MEDIO' };
+    }).sort((a,b) => b['Frecuencia %'] - a['Frecuencia %']);
+    if (alertas.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(alertas), 'Alertas Urgentes');
+
+    // Hoja 2: Por Comercio
+    const byTrade = {};
+    f.forEach(r => {
+      if (!byTrade[r.comercio]) byTrade[r.comercio] = { Comercio: r.comercio, Estado: r.state, Total: 0, 'Alerta Anaquel': 0, 'Alerta Bodega': 0 };
+      byTrade[r.comercio].Total++;
+      if (r.alertaA) byTrade[r.comercio]['Alerta Anaquel']++;
+      if (r.alertaB) byTrade[r.comercio]['Alerta Bodega']++;
+    });
+    const porComercio = Object.values(byTrade).sort((a,b) => b['Alerta Anaquel'] - a['Alerta Anaquel']);
+    if (porComercio.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(porComercio), 'Por Comercio');
+
+    // Hoja 3: Por Producto
+    const byProd = {};
+    f.forEach(r => {
+      if (!byProd[r.producto]) byProd[r.producto] = { Producto: r.producto, Total: 0, 'Alerta Anaquel': 0, 'Alerta Bodega': 0 };
+      byProd[r.producto].Total++;
+      if (r.alertaA) byProd[r.producto]['Alerta Anaquel']++;
+      if (r.alertaB) byProd[r.producto]['Alerta Bodega']++;
+    });
+    const porProducto = Object.values(byProd).sort((a,b) => b['Alerta Anaquel'] - a['Alerta Anaquel']);
+    if (porProducto.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(porProducto), 'Por Producto');
+
+    // Hoja 4: Detalle
+    const detalle = f.map(r => ({
+      Fecha: new Date(r.fecha).toLocaleDateString('es-ES'),
+      Promotor: r.promotor,
+      Comercio: r.comercio,
+      Estado: r.state,
+      Producto: r.producto,
+      'Stock Anaquel': r.anaquel ?? 'SIN STOCK',
+      'Stock Bodega': r.bodega ?? '—',
+      'Umbral Anaquel': r.ua,
+      'Umbral Bodega': r.ub,
+      'Alerta Anaquel': r.alertaA ? 'SÍ' : 'No',
+      'Alerta Bodega': r.alertaB ? 'SÍ' : 'No',
+    }));
+    if (detalle.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detalle), 'Detalle');
+
+    if (!wb.SheetNames.length) { alert('Sin datos para exportar.'); return; }
+    XLSX.writeFile(wb, `CAPTA_Stock_${desde}_${hasta}.xlsx`);
+  } catch(e) { console.error(e); alert('Error al exportar.'); }
+}
+
+window.onLineaChanged = (lineaId) => {
+  if (lineaId) localStorage.setItem('sp-linea', lineaId);
+  document.getElementById('fPromotor').value = '';
+  document.getElementById('fPromotor').innerHTML = '<option value="">Todos</option>';
+  document.getElementById('fProducto').value = '';
+  document.getElementById('fComercio').value = '';
+  document.getElementById('fComercioVal').value = '';
+  document.getElementById('fAlerta').value = '';
+  loadCatalogs().then(() => loadData().then(aplicarFiltros));
+};
+
+const waitDb = window.captaWaitDb;
+
+waitDb(async () => {
+  setDefaultDates();
+  await loadCatalogs();
+  await loadData();
+});
+</script>
+</body>
+</html>
