@@ -1048,23 +1048,63 @@ function onEditPlan(pk) {
 
 async function saveEdit() {
   const id = document.getElementById('e_id').value;
+
   const nombre = document.getElementById('e_nombre').value.trim().toUpperCase();
   const clave = document.getElementById('e_clave').value.trim();
   const clavepwa = document.getElementById('e_clavepwa').value.trim();
   const estatus = document.getElementById('e_estatus').value;
   const venc = document.getElementById('e_venc').value || null;
-  const dias_gracia = parseInt(document.getElementById('e_dias_gracia').value) || 15;
-  const mods = getModsFromGrid('e_mods');
-  if (!nombre || !clave) { toast('Nombre y clave son requeridos', 'err'); return; }
+
+  // 🔒 seguro contra NaN
+  const diasRaw = parseInt(document.getElementById('e_dias_gracia').value);
+  const dias_gracia = isNaN(diasRaw) ? 15 : diasRaw;
+
+  // 🔒 proteger módulos
+  let mods = getModsFromGrid('e_mods');
+
+  // normalización defensiva (ESTO ES LO QUE TE ESTABA ROMPIENDO)
+  if (!Array.isArray(mods)) {
+    try {
+      mods = JSON.parse(mods);
+    } catch {
+      mods = [];
+    }
+  }
+
+  // eliminar basura
+  mods = mods.filter(m => typeof m === 'string' && m.trim().length > 0);
+
+  if (!nombre || !clave) {
+    toast('Nombre y clave son requeridos', 'err');
+    return;
+  }
+
+  const payload = {
+    nombre,
+    clave_acceso: clave,
+    clave_pwa: clavepwa || null,
+    estatus,
+    fecha_vencimiento: venc,
+    modulos_activos: mods,
+    dias_gracia
+  };
+
+  console.log("📦 PATCH PAYLOAD FINAL:", payload);
+
   try {
-    await sb('empresas?id=eq.' + id, {
+    const res = await sb('empresas?id=eq.' + id, {
       method: 'PATCH',
-      body: JSON.stringify({nombre, clave_acceso: clave, clave_pwa: clavepwa, estatus, fecha_vencimiento: venc, modulos_activos: mods, dias_gracia})
+      body: JSON.stringify(payload)
     });
+
     toast('Empresa actualizada correctamente', 'ok');
     closeEdit();
     await loadE();
-  } catch(e) { toast('Error: ' + e.message, 'err'); }
+
+  } catch (e) {
+    console.error("❌ SUPABASE ERROR COMPLETO:", e);
+    toast('Error: ' + (e.message || e.details || 'desconocido'), 'err');
+  }
 }
 
 document.getElementById('editOverlay').addEventListener('click', e => {
