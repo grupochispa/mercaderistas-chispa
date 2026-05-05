@@ -12,9 +12,8 @@ app = Flask(__name__)
 # ─── Configuración de seguridad ───────────────────────────────────────────────
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'tu-clave-secreta-super-larga-y-segura-2025-xyz123')
 
-SUPABASE_URL = "https://czykohaerbcfpxenmssj.supabase.co"
-SUPABASE_KEY = os.getenv('SUPABASE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRqanlsaWtrb2NlbXJsc2p4c2NyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxNjUyNDEsImV4cCI6MjA3ODc0MTI0MX0.fnv1BKn_o-PYEAPljG0V3dt3b2Uifwn8EEzkP8Aab3M')
-
+SUPABASE_URL = os.getenv('SUPABASE_URL', "https://czykohaerbcfpxenmssj.supabase.co")
+SUPABASE_KEY = os.getenv('SUPABASE_KEY')
 headers = {
     "apikey": SUPABASE_KEY,
     "Authorization": f"Bearer {SUPABASE_KEY}",
