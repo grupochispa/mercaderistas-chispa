@@ -647,7 +647,7 @@ const PLANES_DEFAULT = {
     mods: []
   }
 };
-let PLANES = JSON.parse(JSON.stringify(PLANES_DEFAULT));
+let PLANES = {};
 
 /* ══ REGLAS DE PAGO ══ */
 const REGLAS_PAGO = {
@@ -728,19 +728,27 @@ async function sb(path, opts = {}) {
 /* ══ PLANES DESDE DB ══ */
 async function loadPlanesFromDB() {
   try {
-    const res = await sb('capta_planes?select=id,label,descripcion,modulos&order=id.asc');
-    if (!res || !res.length) return;
+    const res = await sb('capta_planes?select=*');
+
+    PLANES = {};
+
     res.forEach(row => {
-      const key = row.id;
-      if (PLANES[key]) {
-        PLANES[key].mods = Array.isArray(row.modulos)
+      PLANES[row.id] = {
+        label: row.label,
+        cls:
+          row.id === 'full' ? 'plan-full' :
+          row.id === 'mid' ? 'plan-mid' :
+          row.id === 'basic' ? 'plan-basic' :
+          'plan-custom',
+        desc: row.descripcion || '',
+        mods: Array.isArray(row.modulos)
           ? row.modulos
-          : JSON.parse(row.modulos || '[]');
-        PLANES[key].desc = row.descripcion || PLANES[key].desc;
-      }
+          : JSON.parse(row.modulos || '[]')
+      };
     });
-  } catch(e) {
-    console.warn('No se pudieron cargar planes desde DB:', e.message);
+
+  } catch (e) {
+    console.warn('Error cargando planes:', e.message);
   }
 }
 
@@ -1127,7 +1135,7 @@ async function crearEmpresa() {
   const clave = document.getElementById('n_clave').value.trim();
   const clavepwa = document.getElementById('n_clavepwa').value.trim();
   const venc = document.getElementById('n_venc').value || null;
-  const mods = getModsFromGrid('n_mods');
+  const mods = MODS.map(m => m.key);
   if (!nombre) { toast('El nombre es requerido', 'err'); return; }
   if (!clave || clave.length < 6) { toast('Clave mínimo 6 caracteres', 'err'); return; }
   if (!clavepwa) { toast('La clave PWA es requerida', 'err'); return; }
