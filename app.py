@@ -615,15 +615,20 @@ def get_records():
     lineas         = fetch_table("web_lineas",     empresa_id=empresa_id,
                                  params=[("activa", "eq.true"), ("order", "nombre.asc")])
 
-    # Mapa id → cliente para cálculo de distancia y verificación
+    # Mapa id → cliente Y trade_name → cliente para cálculo de distancia
     clientes_by_id = {}
+    clientes_by_trade = {}
     for c in clientes_todos:
         cid = c.get("id")
         if cid is not None:
             try:
                 clientes_by_id[int(cid)] = c
             except Exception:
-                continue
+                pass
+            clientes_by_id[str(cid)] = c
+        trade = (c.get("trade_name") or "").strip().upper()
+        if trade:
+            clientes_by_trade[trade] = c
 
     # ── Formatear registros ───────────────────────────────────────────
     formatted_records = []
@@ -635,17 +640,16 @@ def get_records():
             visit_lat = safe_float(record.get("latitude"))
             visit_lon = safe_float(record.get("longitude"))
 
+            # Buscar cliente por trade_name (app móvil no guarda cliente_id)
+            trade_visita = (record.get("trade") or "").strip().upper()
             cliente_id_raw = record.get("cliente_id")
-            cliente_id = None
+            cliente_data = None
             if cliente_id_raw is not None:
-                try:
-                    cliente_id = int(cliente_id_raw)
-                except Exception:
-                    pass
-
-            cliente_data      = clientes_by_id.get(cliente_id)
+                cliente_data = clientes_by_id.get(str(cliente_id_raw)) or clientes_by_id.get(cliente_id_raw)
+            if not cliente_data and trade_visita:
+                cliente_data = clientes_by_trade.get(trade_visita)
             distance          = 0.0
-            verified_status   = "Cliente Desconocido"
+            verified_status   = "Sin Coords Cliente"
             cliente_coords_str = "N/A"
 
             if cliente_data:
@@ -655,15 +659,21 @@ def get_records():
                 if c_lat != 0.0:
                     cliente_coords_str = f"{c_lat:.5f}, {c_lon:.5f}"
 
-                if visit_lat is not None and visit_lon is not None and c_lat != 0.0:
+                if visit_lat is None or visit_lon is None:
+                    verified_status = "Sin GPS Visita"
+                elif c_lat == 0.0 or c_lon == 0.0:
+                    # Cliente existe pero sin coordenadas — GPS del promotor registrado igual
+                    verified_status = "Sin Coords Cliente"
+                else:
                     try:
                         distance = calculate_distance(visit_lat, visit_lon, c_lat, c_lon)
                         verified_status = "Confirmado" if distance <= 150 else "No Confirmado"
                     except Exception as dist_err:
                         print(f"Error distancia registro {record.get('id')}: {dist_err}")
                         verified_status = "Error cálculo distancia"
-                elif visit_lat is None or visit_lon is None:
-                    verified_status = "Sin GPS Visita"
+            elif visit_lat is not None and visit_lon is not None:
+                # Comercio no registrado en web_clientes pero tiene GPS — marcar como registrado
+                verified_status = "Sin Coords Cliente"
 
             formatted_records.append({
                 "id":              record.get("id"),
