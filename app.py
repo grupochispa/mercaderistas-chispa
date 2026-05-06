@@ -319,7 +319,7 @@ def build_records_params(empresa_id, date_from=None, date_to=None,
     """Construye la lista de params para query a web_precios."""
     year = year or datetime.now().year
     params = [
-        ("select", "*,web_promotores!inner(promoter_name,promoter_id)"),
+        ("select", "*,web_promotores!left(promoter_name,promoter_id)"),
         ("order", "created_at.desc"),
         ("empresa_id", f"eq.{empresa_id}"),
     ]
@@ -569,7 +569,7 @@ def get_records():
     trade_filter    = request.args.get('trade', '').strip()
 
     params = [
-        ("select", "*,web_promotores!inner(promoter_name, promoter_id)"),
+        ("select", "*,web_promotores!left(promoter_name, promoter_id)"),
         ("order",      "created_at.desc"),
         ("empresa_id", f"eq.{empresa_id}")
     ]
