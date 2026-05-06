@@ -12,7 +12,7 @@ app = Flask(__name__)
 # ─── Configuración de seguridad ───────────────────────────────────────────────
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'tu-clave-secreta-super-larga-y-segura-2025-xyz123')
 
-SUPABASE_URL = "https://czykohaerbcfpxenmssj.supabase.co"
+SUPABASE_URL = os.getenv("SUPABASE_URL", "https://czykohaerbcfpxenmssj.supabase.co")
 SUPABASE_KEY = os.getenv('SUPABASE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN6eWtvaGFlcmJjZnB4ZW5tc3NqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc4OTk5MDUsImV4cCI6MjA5MzQ3NTkwNX0.-emgKcogZ1cyG7tya4FN6FpAEu7TwUlFjUfwLcEMHHY')
 
 headers = {
@@ -178,7 +178,9 @@ def get_current_empresa():
         return resp.json()[0]
     return None
 def get_empresa_modulos():
-    """Retorna el dict de modulos_activos de la empresa en sesión."""
+    """Retorna SIEMPRE un dict {key: True} de modulos_activos.
+    Compatible con array text[] (Chispa) y JSONB objeto (legacy).
+    """
     empresa_id = session.get('empresa_id')
     if not empresa_id:
         return None
@@ -186,10 +188,20 @@ def get_empresa_modulos():
     try:
         resp = requests.get(url, headers=headers, timeout=5)
         if resp.ok and resp.json():
-            raw = resp.json()[0].get('modulos_activos') or {}
+            raw = resp.json()[0].get('modulos_activos')
+            if not raw:
+                return {}
+            # array text[] → convertir a dict {key: True}
+            if isinstance(raw, list):
+                return {k: True for k in raw if isinstance(k, str)}
+            # string JSON → parsear
             if isinstance(raw, str):
                 import json as _json
-                raw = _json.loads(raw)
+                parsed = _json.loads(raw)
+                if isinstance(parsed, list):
+                    return {k: True for k in parsed if isinstance(k, str)}
+                return parsed  # ya es dict
+            # ya es dict {key: True}
             return raw
     except Exception:
         pass
