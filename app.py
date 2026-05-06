@@ -319,7 +319,7 @@ def build_records_params(empresa_id, date_from=None, date_to=None,
     """Construye la lista de params para query a web_precios."""
     year = year or datetime.now().year
     params = [
-        ("select", "*,web_promotores!left(promoter_name,promoter_id)"),
+        ("select", "*"),
         ("order", "created_at.desc"),
         ("empresa_id", f"eq.{empresa_id}"),
     ]
@@ -569,7 +569,7 @@ def get_records():
     trade_filter    = request.args.get('trade', '').strip()
 
     params = [
-        ("select", "*,web_promotores!left(promoter_name, promoter_id)"),
+        ("select", "*"),
         ("order",      "created_at.desc"),
         ("empresa_id", f"eq.{empresa_id}")
     ]
@@ -630,7 +630,7 @@ def get_records():
 
     for record in records_raw:
         try:
-            promoter_info = record.get('web_promotores') or {}
+            promoter_info = {}  # promoter_name viene directo en web_precios
 
             visit_lat = safe_float(record.get("latitude"))
             visit_lon = safe_float(record.get("longitude"))
@@ -668,7 +668,7 @@ def get_records():
             formatted_records.append({
                 "id":              record.get("id"),
                 "created_at":      record.get("created_at"),
-                "promoter_name":   promoter_info.get('promoter_name', "Sin Nombre"),
+                "promoter_name":   record.get("promoter_name") or promoter_info.get("promoter_name", "Sin Nombre"),
                 "promoter_id":     record.get("promoter_id"),
                 "state":           record.get("state", "N/A"),
                 "zone":            record.get("zone", "N/A"),
