@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Líneas de Producto — CHISPA</title>
+<title>Líneas de Producto — CAPTA</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -93,7 +93,10 @@
 
 <script>
 function waitDb(fn){if(window.db){fn();return;}const t=setInterval(()=>{if(window.db){clearInterval(t);fn();}},50);}
-const db={from:(...a)=>window.db.from(...a)};
+const db={
+  from:(...a)=>window.db.from(...a),
+  get storage(){ return window.db.storage; }
+};
 const empresaId=localStorage.getItem('empresa_id')||await(async()=>{try{const r=await fetch('/api/dashboard/config');if(r.ok){const d=await r.json();localStorage.setItem('empresa_id',d.empresa_id);localStorage.setItem('empresa_nombre',d.empresa_nombre);return d.empresa_id;}return null;}catch{return null;}})();
 const STORAGE_BASE='https://czykohaerbcfpxenmssj.supabase.co/storage/v1/object/public/planogramas/';
 if(!empresaId){window.location.replace('/');throw new Error('no session');}
