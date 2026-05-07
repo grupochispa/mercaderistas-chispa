@@ -385,7 +385,7 @@ def stock():
 @app.route('/gps')
 @require_modulo('gps_verificacion')
 def gps():
-    return render_template('GPS.html')
+    return render_template('gps.html')
  
 @app.route('/productos')
 @require_modulo('productos')

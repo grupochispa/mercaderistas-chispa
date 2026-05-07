@@ -3,7 +3,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Reportes — CAPTA</title>
+<title>Reportes — CHISPA</title>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -154,7 +154,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 <!-- HEADER -->
 <div class="rp-hdr">
   <div>
-    <div class="rp-title">📊 Centro de Reportes CAPTA</div>
+    <div class="rp-title">📊 Centro de Reportes CHISPA</div>
     <div class="rp-sub" id="rp-context">Cargando datos...</div>
   </div>
   <div class="export-btns">
@@ -364,7 +364,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
 function waitDb(fn){ if(window.db){fn();return;} const t=setInterval(()=>{if(window.db){clearInterval(t);fn();}},50); }
 const $db = a => window.db.from(a);
 const EID  = localStorage.getItem('empresa_id')||'';
-const ENOMBRE = localStorage.getItem('empresa_nombre')||'CAPTA';
+const ENOMBRE = localStorage.getItem('empresa_nombre')||'CHISPA';
 if(!EID) window.location.replace('/');
 
 // Estado
@@ -1166,7 +1166,7 @@ async function exportPDF(todos=false,conGraf=true,specificTab=null){
       pdf.rect(0,0,210,18,'F');
       pdf.setTextColor(255,255,255);
       pdf.setFontSize(13);pdf.setFont('helvetica','bold');
-      pdf.text(`CAPTA — ${tabNames[tab]}`,14,12);
+      pdf.text(`CHISPA — ${tabNames[tab]}`,14,12);
       pdf.setFontSize(8);pdf.setFont('helvetica','normal');
       const desde=document.getElementById('fDesde').value;
       const hasta=document.getElementById('fHasta').value;
@@ -1197,11 +1197,11 @@ async function exportPDF(todos=false,conGraf=true,specificTab=null){
       for(let i=1;i<=pages;i++){
         pdf.setPage(i);
         pdf.setFontSize(7);pdf.setTextColor(150,150,150);
-        pdf.text('© CAPTA C.A. — archyss-dev',14,293);
+        pdf.text('© Arrocera Chispa',14,293);
         pdf.text(`Pág. ${i}/${pages}`,196,293,{align:'right'});
       }
     }
-    pdf.save(`CAPTA_${tabNames[specificTab||activeTab]}_${new Date().toISOString().split('T')[0]}.pdf`);
+    pdf.save(`CHISPA_${tabNames[specificTab||activeTab]}_${new Date().toISOString().split('T')[0]}.pdf`);
   }catch(e){console.error(e);}
   finally{spinEl.style.display='none';}
 }
@@ -1226,7 +1226,7 @@ function exportXLS(todos=false,specificTab=null){
     };
 
     // Hoja de resumen
-    const resumen=[['Reporte CAPTA'],['Empresa:',ENOMBRE],['Período:',`${desde} → ${hasta}`],['Registros:',filtData.length],['Generado:',new Date().toLocaleString('es-ES')]];
+    const resumen=[['Reporte CHISPA'],['Empresa:',ENOMBRE],['Período:',`${desde} → ${hasta}`],['Registros:',filtData.length],['Generado:',new Date().toLocaleString('es-ES')]];
     const wsRes=XLSX.utils.aoa_to_sheet(resumen);
     XLSX.utils.book_append_sheet(wb,wsRes,'Info');
 
@@ -1315,7 +1315,7 @@ function exportXLS(todos=false,specificTab=null){
       }
     });
 
-    XLSX.writeFile(wb,`CAPTA_Reportes_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.writeFile(wb,`CHISPA_Reportes_${new Date().toISOString().split('T')[0]}.xlsx`);
   }catch(e){console.error(e);}
   finally{spinEl.style.display='none';}
 }
@@ -1323,7 +1323,7 @@ function exportXLS(todos=false,specificTab=null){
 // ════════════════════════════════════════
 // INIT
 // ════════════════════════════════════════
-// Sincronizar dark mode con el navbar de CAPTA
+// Sincronizar dark mode con el navbar de CHISPA
 function syncDark(){
   if(document.documentElement.classList.contains('dark')){
     document.body.classList.add('dark');
