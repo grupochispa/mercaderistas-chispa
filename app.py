@@ -516,12 +516,15 @@ def login():
 def ia_resumen():
     """Proxy hacia OpenRouter — la key vive en OPENROUTER_KEY env var."""
     try:
-        OR_KEY   = os.getenv('OPENROUTER_KEY', '')
+        OR_KEY   = os.getenv('OPENROUTER_KEY', '').strip()  # strip() por si hay espacios
         OR_URL   = 'https://openrouter.ai/api/v1/chat/completions'
-        OR_MODEL = 'meta-llama/llama-3.3-70b-instruct:free'
+        OR_MODEL = 'mistralai/mistral-7b-instruct:free'
 
         if not OR_KEY:
-            return jsonify({'error': 'OPENROUTER_KEY no configurada en el servidor'}), 500
+            return jsonify({'error': 'OPENROUTER_KEY no configurada en el servidor. Ve a Render → Environment y agrega la variable.'}), 500
+        
+        # Log para debug (solo primeros 10 chars para no exponer la key)
+        print(f"[IA] OR_KEY cargada: {OR_KEY[:10]}... ({len(OR_KEY)} chars)")
 
         body = request.get_json()
         prompt = body.get('prompt', '')
@@ -541,7 +544,12 @@ def ia_resumen():
         }, timeout=30)
 
         if not resp.ok:
-            err = resp.json().get('error', {}).get('message', f'HTTP {resp.status_code}')
+            try:
+                err_body = resp.json()
+                err = err_body.get('error', {}).get('message', '') or str(err_body)
+            except Exception:
+                err = f'HTTP {resp.status_code}: {resp.text[:200]}'
+            print(f"[IA] OpenRouter error: {err}")
             return jsonify({'error': err}), resp.status_code
 
         data    = resp.json()
