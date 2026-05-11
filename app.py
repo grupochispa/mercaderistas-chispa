@@ -512,7 +512,7 @@ def login():
 
 # ── IA: Resumen inteligente via OpenRouter ─────────────────────────────────────
 @app.route('/api/ia/resumen', methods=['POST'])
-@require_login
+@require_session
 def ia_resumen():
     """Proxy hacia OpenRouter — la key vive en OPENROUTER_KEY env var."""
     try:
