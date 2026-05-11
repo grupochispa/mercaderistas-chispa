@@ -518,7 +518,7 @@ def ia_resumen():
     try:
         OR_KEY   = os.getenv('OPENROUTER_KEY', '').strip()  # strip() por si hay espacios
         OR_URL   = 'https://openrouter.ai/api/v1/chat/completions'
-        OR_MODEL = 'mistralai/mistral-7b-instruct:free'
+        OR_MODEL = 'openrouter/auto'
 
         if not OR_KEY:
             return jsonify({'error': 'OPENROUTER_KEY no configurada en el servidor. Ve a Render → Environment y agrega la variable.'}), 500
