@@ -171,6 +171,10 @@
     </div>
 
     <div class="flex flex-wrap gap-3 justify-end border-t dark:border-slate-700 pt-4">
+      <button id="btnResumenIA" onclick="generarResumenIA()"
+        class="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white font-semibold py-2 px-5 rounded-lg shadow-lg transition-all flex items-center gap-2">
+        <i class="fas fa-robot"></i> <span id="btnResumenIAText">✨ Resumen IA</span>
+      </button>
       <button id="exportCSV"
         class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-5 rounded-lg shadow transition-all flex items-center gap-2">
         <i class="fas fa-file-csv"></i> Exportar CSV
@@ -182,6 +186,84 @@
       <button id="deleteSelected"
         class="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-5 rounded-lg shadow transition-all flex items-center gap-2" disabled>
         <i class="fas fa-trash-alt"></i> Eliminar (<span id="selectedCount">0</span>)
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ PANEL RESUMEN IA ════════════════════════════════════════ -->
+  <div id="panelIA" style="display:none"
+    class="bg-gradient-to-br from-violet-50 to-indigo-50 dark:from-violet-900/20 dark:to-indigo-900/20 shadow-lg rounded-2xl p-6 mb-8 border border-violet-200 dark:border-violet-700">
+
+    <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow">
+          <i class="fas fa-robot text-white text-lg"></i>
+        </div>
+        <div>
+          <h2 class="text-lg font-bold text-violet-800 dark:text-violet-200">Resumen Inteligente</h2>
+          <p class="text-xs text-violet-500 dark:text-violet-400" id="iaSubtitle">Analizando datos filtrados…</p>
+        </div>
+      </div>
+      <button onclick="document.getElementById('panelIA').style.display='none'"
+        class="text-violet-400 hover:text-violet-600 transition-colors text-sm">
+        <i class="fas fa-times"></i> Cerrar
+      </button>
+    </div>
+
+    <!-- Loader -->
+    <div id="iaLoader" class="flex flex-col items-center justify-center py-10 gap-4">
+      <div class="relative w-16 h-16">
+        <div class="absolute inset-0 rounded-full border-4 border-violet-200 dark:border-violet-800"></div>
+        <div class="absolute inset-0 rounded-full border-4 border-transparent border-t-violet-500 animate-spin"></div>
+        <div class="absolute inset-0 flex items-center justify-center">
+          <i class="fas fa-robot text-violet-500 text-lg"></i>
+        </div>
+      </div>
+      <p class="text-sm text-violet-500 dark:text-violet-400 animate-pulse">Analizando con Gemini AI…</p>
+    </div>
+
+    <!-- Resultado -->
+    <div id="iaResultado" style="display:none">
+      <!-- Párrafo narrativo -->
+      <div class="bg-white dark:bg-slate-800 rounded-xl p-5 mb-4 border border-violet-100 dark:border-violet-800 shadow-sm">
+        <div class="flex items-center gap-2 mb-3">
+          <i class="fas fa-align-left text-violet-500 text-sm"></i>
+          <span class="text-xs font-bold text-violet-600 dark:text-violet-300 uppercase tracking-widest">Resumen</span>
+        </div>
+        <p id="iaParrafo" class="text-gray-700 dark:text-gray-200 text-sm leading-relaxed"></p>
+      </div>
+
+      <!-- Puntos clave -->
+      <div class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-violet-100 dark:border-violet-800 shadow-sm">
+        <div class="flex items-center gap-2 mb-3">
+          <i class="fas fa-list-check text-indigo-500 text-sm"></i>
+          <span class="text-xs font-bold text-indigo-600 dark:text-indigo-300 uppercase tracking-widest">Puntos Clave</span>
+        </div>
+        <ul id="iaBullets" class="space-y-2"></ul>
+      </div>
+
+      <!-- Footer -->
+      <div class="flex items-center justify-between mt-4 flex-wrap gap-2">
+        <p class="text-xs text-violet-400 dark:text-violet-500">
+          <i class="fas fa-microchip mr-1"></i>Generado con Gemini 1.5 Flash · <span id="iaTimestamp"></span>
+        </p>
+        <button onclick="generarResumenIA()"
+          class="text-xs text-violet-600 dark:text-violet-300 hover:underline flex items-center gap-1">
+          <i class="fas fa-rotate-right"></i> Regenerar
+        </button>
+      </div>
+    </div>
+
+    <!-- Error -->
+    <div id="iaError" style="display:none"
+      class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-xl p-5">
+      <div class="flex items-center gap-2 mb-2">
+        <i class="fas fa-triangle-exclamation text-red-500"></i>
+        <span class="font-semibold text-red-600 dark:text-red-400 text-sm">Error al generar resumen</span>
+      </div>
+      <p id="iaErrorMsg" class="text-xs text-red-500 dark:text-red-400"></p>
+      <button onclick="generarResumenIA()" class="mt-3 text-xs bg-red-100 dark:bg-red-800 text-red-600 dark:text-red-300 px-3 py-1 rounded-lg hover:bg-red-200 transition-colors">
+        <i class="fas fa-rotate-right mr-1"></i>Reintentar
       </button>
     </div>
   </div>
@@ -726,7 +808,7 @@ function updateTable() {
     const date  = new Date(g.created_at);
     const fecha = isNaN(date) ? 'N/A' : date.toLocaleDateString('es-ES');
     const hora  = isNaN(date) ? '' : date.toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' });
-    const dist  = (g.distance !== null && g.distance !== undefined) ? `${g.distance} m` : '—';
+    const dist  = g.distance > 0 ? `${g.distance} m` : '—';
 
     // Líneas trabajadas en este grupo
     const lineasBadges = g.lineas.length > 0
@@ -1247,6 +1329,222 @@ async function init() {
 }
 
 if (empresaId) init();
+
+  // ══════════════════════════════════════════════════════════════
+  //  RESUMEN IA — Gemini 1.5 Flash
+  // ══════════════════════════════════════════════════════════════
+  const GEMINI_KEY = 'AIzaSyBo5QKs6hsKiGj_qpEVjLJnaK6FGyMAdNQ';
+  const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`;
+
+  async function generarResumenIA() {
+    // Tomar los datos filtrados actuales
+    const datos = filteredGroups;
+    if (!datos || datos.length === 0) {
+      alert('No hay datos filtrados para analizar. Ajusta los filtros primero.');
+      return;
+    }
+
+    // Mostrar panel y loader
+    const panel     = document.getElementById('panelIA');
+    const loader    = document.getElementById('iaLoader');
+    const resultado = document.getElementById('iaResultado');
+    const error     = document.getElementById('iaError');
+    const btnText   = document.getElementById('btnResumenIAText');
+    const subtitle  = document.getElementById('iaSubtitle');
+
+    panel.style.display = 'block';
+    loader.style.display = 'flex';
+    resultado.style.display = 'none';
+    error.style.display = 'none';
+    btnText.textContent = '⏳ Analizando...';
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    // Obtener filtros activos para el subtítulo
+    const desde    = document.getElementById('fecha_desde')?.value || '';
+    const hasta    = document.getElementById('fecha_hasta')?.value || '';
+    const promotor = document.getElementById('promotor')?.selectedOptions[0]?.text || 'Todos';
+    const linea    = document.getElementById('linea_filter')?.selectedOptions[0]?.text || 'Todas';
+    subtitle.textContent = `${desde} → ${hasta} · ${promotor} · ${linea} · ${datos.length} visitas`;
+
+    // Construir resumen de datos para enviar a Gemini
+    const empresa = localStorage.getItem('empresa_nombre') || 'CHISPA';
+
+    // Estadísticas agregadas
+    const totalVisitas    = datos.length;
+    const confirmadosGPS  = datos.filter(isConfirmed).length;
+    const pctGPS          = totalVisitas > 0 ? Math.round(confirmadosGPS / totalVisitas * 100) : 0;
+
+    // Promotores únicos
+    const promotores = [...new Set(datos.map(g => g.promoterName || g.promoter_name || 'Sin nombre'))];
+
+    // Comercios únicos
+    const comercios = [...new Set(datos.map(g => g.trade))];
+
+    // Precios propios y de competencia
+    const preciosPropios = [];
+    const preciosComp    = [];
+    datos.forEach(g => {
+      (g.myitems || []).forEach(i => {
+        if (i.price && i.currency) preciosPropios.push({ prod: i.presentation, precio: i.price, moneda: i.currency });
+      });
+      (g.competitoritems || []).forEach(i => {
+        if (i.price && i.currency) preciosComp.push({ prod: i.presentation, precio: i.price, moneda: i.currency });
+      });
+    });
+
+    // Promedios de precios propios por producto
+    const promPropios = {};
+    preciosPropios.forEach(p => {
+      if (!promPropios[p.prod]) promPropios[p.prod] = { sum: 0, cnt: 0, moneda: p.moneda };
+      promPropios[p.prod].sum += p.precio;
+      promPropios[p.prod].cnt += 1;
+    });
+    const resumenPropios = Object.entries(promPropios)
+      .map(([prod, v]) => `${prod}: ${(v.sum/v.cnt).toFixed(2)} ${v.moneda}`)
+      .join(', ');
+
+    // Promedios de precios competencia
+    const promComp = {};
+    preciosComp.forEach(p => {
+      if (!promComp[p.prod]) promComp[p.prod] = { sum: 0, cnt: 0, moneda: p.moneda };
+      promComp[p.prod].sum += p.precio;
+      promComp[p.prod].cnt += 1;
+    });
+    const resumenComp = Object.entries(promComp)
+      .map(([prod, v]) => `${prod}: ${(v.sum/v.cnt).toFixed(2)} ${v.moneda}`)
+      .join(', ') || 'Sin datos';
+
+    // Caras de anaquel
+    const totalCarasAntes   = datos.reduce((s, g) => s + (parseFloat(g.our_faces_before_counted) || 0), 0);
+    const totalCarasDespues = datos.reduce((s, g) => s + (parseFloat(g.our_faces_after) || 0), 0);
+    const gananciaCaras     = totalCarasDespues - totalCarasAntes;
+
+    // Stock
+    const totalStockAnaquel = datos.reduce((s, g) => {
+      return s + (g.myitems || []).reduce((ss, i) => ss + (parseFloat(i.stock_shelf) || 0), 0);
+    }, 0);
+    const totalStockBodega = datos.reduce((s, g) => {
+      return s + (g.myitems || []).reduce((ss, i) => ss + (parseFloat(i.stock_warehouse) || 0), 0);
+    }, 0);
+
+    // Espacios adicionales
+    const espacios = datos.reduce((s, g) => s + ((g.espacios_adicionales || g.espaciosAdicionales || []).length), 0);
+
+    // Mayoristas y cerrados
+    const mayoristas = datos.filter(g => g.p_mayorista === 'Si' || g.p_mayorista === true).length;
+    const cerrados   = datos.filter(g => g.cliente_cerrado === 'Si' || g.cliente_cerrado === true).length;
+
+    // Comentarios de campo
+    const comentarios = datos
+      .filter(g => g.comments && g.comments.trim().length > 5)
+      .map(g => `"${g.comments.trim().slice(0, 120)}"`)
+      .slice(0, 5)
+      .join(' | ') || 'Sin comentarios';
+
+    // Construir prompt
+    const prompt = `Eres el asistente de análisis de mercadeo de la empresa ${empresa}, dedicada a la distribución y mercadeo de productos de arroz en Venezuela.
+
+Analiza los siguientes datos de visitas de mercaderistas en el período ${desde} al ${hasta} y genera un resumen ejecutivo profesional en español.
+
+DATOS DEL PERÍODO:
+- Total visitas realizadas: ${totalVisitas}
+- Promotores activos: ${promotores.join(', ')}
+- Comercios visitados (${comercios.length}): ${comercios.slice(0,10).join(', ')}${comercios.length > 10 ? ` y ${comercios.length-10} más` : ''}
+- GPS Confirmado: ${confirmadosGPS}/${totalVisitas} (${pctGPS}%)
+- Comercios mayoristas: ${mayoristas}
+- Comercios cerrados: ${cerrados}
+
+PRECIOS PROPIOS (promedio):
+${resumenPropios || 'Sin registros de precios propios'}
+
+PRECIOS COMPETENCIA (promedio):
+${resumenComp}
+
+PRESENCIA EN ANAQUEL:
+- Caras antes: ${totalCarasAntes} → Caras después: ${totalCarasDespues} (${gananciaCaras >= 0 ? '+' : ''}${gananciaCaras} caras)
+- Stock anaquel total: ${totalStockAnaquel} unidades
+- Stock bodega total: ${totalStockBodega} unidades
+- Espacios adicionales ganados: ${espacios}
+
+COMENTARIOS DE CAMPO:
+${comentarios}
+
+INSTRUCCIONES DE FORMATO:
+Responde ÚNICAMENTE con un JSON válido con esta estructura exacta:
+{
+  "resumen": "Párrafo narrativo ejecutivo de 3-4 oraciones resumiendo el desempeño del período, comparativa de precios y logros en anaquel.",
+  "puntos": [
+    "Punto clave 1 con dato específico",
+    "Punto clave 2 con dato específico",
+    "Punto clave 3 con dato específico",
+    "Punto clave 4 con dato específico",
+    "Punto clave 5 con dato específico"
+  ]
+}
+No incluyas texto fuera del JSON. No uses markdown.`;
+
+    try {
+      const resp = await fetch(GEMINI_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 1024,
+          }
+        })
+      });
+
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => ({}));
+        throw new Error(errData?.error?.message || `HTTP ${resp.status}`);
+      }
+
+      const data = await resp.json();
+      const raw  = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+      // Limpiar posibles backticks de markdown
+      const clean = raw.replace(/```json|```/g, '').trim();
+      let parsed;
+      try {
+        parsed = JSON.parse(clean);
+      } catch {
+        // Si Gemini devuelve texto plano sin JSON, mostrarlo igual
+        parsed = { resumen: clean, puntos: [] };
+      }
+
+      // Renderizar
+      document.getElementById('iaParrafo').textContent = parsed.resumen || '—';
+
+      const ulBullets = document.getElementById('iaBullets');
+      ulBullets.innerHTML = '';
+      (parsed.puntos || []).forEach((punto, i) => {
+        const colors = ['violet','indigo','blue','cyan','emerald'];
+        const c = colors[i % colors.length];
+        const li = document.createElement('li');
+        li.className = 'flex items-start gap-2 text-sm text-gray-700 dark:text-gray-200';
+        li.innerHTML = `
+          <span class="mt-0.5 w-5 h-5 rounded-full bg-${c}-100 dark:bg-${c}-900/40 text-${c}-600 dark:text-${c}-400 flex items-center justify-center text-xs font-bold flex-shrink-0">${i+1}</span>
+          <span>${punto}</span>`;
+        ulBullets.appendChild(li);
+      });
+
+      document.getElementById('iaTimestamp').textContent = new Date().toLocaleString('es-VE');
+
+      loader.style.display = 'none';
+      resultado.style.display = 'block';
+
+    } catch (err) {
+      loader.style.display = 'none';
+      error.style.display = 'block';
+      document.getElementById('iaErrorMsg').textContent = err.message || 'Error desconocido';
+      console.error('Gemini error:', err);
+    } finally {
+      btnText.textContent = '✨ Resumen IA';
+    }
+  }
+
 </script>
 </body>
 </html>
