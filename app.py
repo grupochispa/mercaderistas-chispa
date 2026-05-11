@@ -509,6 +509,48 @@ def login():
     return render_template('login.html')
 
 
+
+# ── IA: Resumen inteligente via OpenRouter ─────────────────────────────────────
+@app.route('/api/ia/resumen', methods=['POST'])
+@require_login
+def ia_resumen():
+    """Proxy hacia OpenRouter — la key vive en OPENROUTER_KEY env var."""
+    try:
+        OR_KEY   = os.getenv('OPENROUTER_KEY', '')
+        OR_URL   = 'https://openrouter.ai/api/v1/chat/completions'
+        OR_MODEL = 'meta-llama/llama-3.3-70b-instruct:free'
+
+        if not OR_KEY:
+            return jsonify({'error': 'OPENROUTER_KEY no configurada en el servidor'}), 500
+
+        body = request.get_json()
+        prompt = body.get('prompt', '')
+        if not prompt:
+            return jsonify({'error': 'Prompt vacío'}), 400
+
+        resp = requests.post(OR_URL, json={
+            'model':       OR_MODEL,
+            'messages':    [{'role': 'user', 'content': prompt}],
+            'temperature': 0.7,
+            'max_tokens':  1024,
+        }, headers={
+            'Authorization': f'Bearer {OR_KEY}',
+            'HTTP-Referer':  request.host_url,
+            'X-Title':       'CHISPA Dashboard',
+            'Content-Type':  'application/json',
+        }, timeout=30)
+
+        if not resp.ok:
+            err = resp.json().get('error', {}).get('message', f'HTTP {resp.status_code}')
+            return jsonify({'error': err}), resp.status_code
+
+        data    = resp.json()
+        content_text = data.get('choices', [{}])[0].get('message', {}).get('content', '')
+        return jsonify({'content': content_text})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 # ─── API: Configuración pública del dashboard (sin exponer SUPABASE_KEY) ──────
 @app.route('/api/dashboard/config')
 @require_session
