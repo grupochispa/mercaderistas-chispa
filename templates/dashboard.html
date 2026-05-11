@@ -245,7 +245,7 @@
       <!-- Footer -->
       <div class="flex items-center justify-between mt-4 flex-wrap gap-2">
         <p class="text-xs text-violet-400 dark:text-violet-500">
-          <i class="fas fa-microchip mr-1"></i>Generado con Gemini 1.5 Flash · <span id="iaTimestamp"></span>
+          <i class="fas fa-microchip mr-1"></i>Generado con Llama 3.3 70B · OpenRouter · <span id="iaTimestamp"></span>
         </p>
         <button onclick="generarResumenIA()"
           class="text-xs text-violet-600 dark:text-violet-300 hover:underline flex items-center gap-1">
@@ -1333,8 +1333,9 @@ if (empresaId) init();
   // ══════════════════════════════════════════════════════════════
   //  RESUMEN IA — Gemini 1.5 Flash
   // ══════════════════════════════════════════════════════════════
-  const GEMINI_KEY = 'AIzaSyAasTckop66nwjn69FD-XlpfXdJACAfPwc';
-  const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`;
+  const OR_KEY   = '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';
+  const OR_URL   = 'https://openrouter.ai/api/v1/chat/completions';
+  const OR_MODEL = 'meta-llama/llama-3.3-70b-instruct:free';
 
   async function generarResumenIA() {
     // Tomar los datos filtrados actuales
@@ -1484,15 +1485,19 @@ Responde ÚNICAMENTE con un JSON válido con esta estructura exacta:
 No incluyas texto fuera del JSON. No uses markdown.`;
 
     try {
-      const resp = await fetch(GEMINI_URL, {
+      const resp = await fetch(OR_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${OR_KEY}`,
+          'HTTP-Referer': window.location.origin,
+          'X-Title': 'CHISPA Dashboard'
+        },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 1024,
-          }
+          model: OR_MODEL,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.7,
+          max_tokens: 1024,
         })
       });
 
@@ -1502,7 +1507,7 @@ No incluyas texto fuera del JSON. No uses markdown.`;
       }
 
       const data = await resp.json();
-      const raw  = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      const raw  = data?.choices?.[0]?.message?.content || '';
 
       // Limpiar posibles backticks de markdown
       const clean = raw.replace(/```json|```/g, '').trim();
