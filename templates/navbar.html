@@ -409,8 +409,19 @@ async function _applyModules(empresaId) {
     if (!res.ok) return;
     const data = await res.json();
     const raw  = data[0]?.modulos_activos;
-    if (!raw || Object.keys(raw).length === 0) return;
-    const mods = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (!raw || (Array.isArray(raw) ? raw.length === 0 : Object.keys(raw).length === 0)) return;
+    // modulos_activos puede ser array text[] o objeto {key:true} — normalizar a objeto
+    let mods;
+    if (Array.isArray(raw)) {
+      mods = Object.fromEntries(raw.map(k => [k, true]));
+    } else if (typeof raw === 'string') {
+      try {
+        const p = JSON.parse(raw);
+        mods = Array.isArray(p) ? Object.fromEntries(p.map(k => [k, true])) : p;
+      } catch { mods = {}; }
+    } else {
+      mods = raw;
+    }
 
     Object.entries(_MOD_LINKS).forEach(([key, selectors]) => {
       const allowed = mods[key] === true;
