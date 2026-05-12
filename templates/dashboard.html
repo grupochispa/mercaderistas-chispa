@@ -472,6 +472,28 @@ function agruparVisitas(records) {
       g.longitude   = r.longitude;
       g.client_coords = r.client_coords;
     }
+    // ── Acumular items de todos los registros del grupo ──
+    const pJ = window.captaParseJ || (v => Array.isArray(v) ? v : []);
+    if (!g.myitems)          g.myitems          = [];
+    if (!g.competitoritems)  g.competitoritems  = [];
+    if (!g.espacios_adicionales) g.espacios_adicionales = [];
+    if (!g.before_photos)    g.before_photos    = [];
+    if (!g.after_photos)     g.after_photos     = [];
+    pJ(r.myitems).forEach(item => g.myitems.push(item));
+    pJ(r.competitoritems).forEach(item => g.competitoritems.push(item));
+    pJ(r.espacios_adicionales).forEach(item => g.espacios_adicionales.push(item));
+    pJ(r.before_photos).forEach(p => g.before_photos.push(p));
+    pJ(r.after_photos).forEach(p => g.after_photos.push(p));
+    // Acumular caras y metros (suma de todos los registros)
+    g.our_faces_after          = (parseFloat(g.our_faces_after) || 0) + (parseFloat(r.our_faces_after) || 0);
+    g.our_faces_before_counted = (parseFloat(g.our_faces_before_counted) || 0) + (parseFloat(r.our_faces_before_counted) || 0);
+    g.total_faces              = (parseFloat(g.total_faces) || 0) + (parseFloat(r.total_faces) || 0);
+    g.shelf_meters             = (parseFloat(g.shelf_meters) || 0) + (parseFloat(r.shelf_meters) || 0);
+    g.competitor_faces         = (parseFloat(g.competitor_faces) || 0) + (parseFloat(r.competitor_faces) || 0);
+    // Preservar comentarios
+    if (r.comments && r.comments.trim()) {
+      g.comments = g.comments ? g.comments + ' | ' + r.comments.trim() : r.comments.trim();
+    }
   });
   return [...map.values()];
 }
