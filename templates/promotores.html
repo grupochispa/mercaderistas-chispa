@@ -32,8 +32,6 @@
         <div><label class="sp-label">Zona *</label><select id="zona_id" class="sp-select" disabled required><option value="">Seleccione…</option></select></div>
         <div><label class="sp-label">Clientes asignados</label><input type="number" id="clientes_asig" class="sp-input" min="0" value="0"></div>
         <div><label class="sp-label">Días de trabajo</label><input type="number" id="dias_trabajo" class="sp-input" min="0" value="0"></div>
-        <div><label class="sp-label">Contraseña *</label><input type="password" id="password" class="sp-input" required placeholder="Mín. 4 caracteres"></div>
-        <div><label class="sp-label">Confirmar contraseña *</label><input type="password" id="password_confirm" class="sp-input" required placeholder="Repetir contraseña"></div>
       </div>
       <button type="submit" class="sp-btn sp-btn-primary"><i class="fas fa-plus"></i> Agregar Promotor</button>
     </form>
@@ -244,11 +242,7 @@ document.getElementById('addForm').addEventListener('submit',async e=>{
   if(!pid||!pname||!estadoId){captaToast('Completa los campos requeridos','error');return;}
   const{data:dup}=await db.from('web_promotores').select('id').eq('empresa_id',empresaId).eq('promoter_id',pid).maybeSingle();
   if(dup){captaToast(`El ID "${pid}" ya existe`,'warn');return;}
-  const pass = document.getElementById('password').value.trim();
-  const passConf = document.getElementById('password_confirm').value.trim();
-  if(!pass || pass.length < 4){captaToast('La contraseña debe tener al menos 4 caracteres','error');return;}
-  if(pass !== passConf){captaToast('Las contraseñas no coinciden','error');return;}
-  const{error}=await db.from('web_promotores').insert([{empresa_id:empresaId,promoter_id:pid,promoter_name:pname,password:pass,estado_id:estadoId||null,zona_id:zonaId||null,clientes_asig:parseInt(document.getElementById('clientes_asig').value)||0,dias_trabajo:parseInt(document.getElementById('dias_trabajo').value)||0}]);
+  const{error}=await db.from('web_promotores').insert([{empresa_id:empresaId,promoter_id:pid,promoter_name:pname,estado_id:estadoId||null,zona_id:zonaId||null,clientes_asig:parseInt(document.getElementById('clientes_asig').value)||0,dias_trabajo:parseInt(document.getElementById('dias_trabajo').value)||0}]);
   if(error){captaToast('Error: '+error.message,'error');return;}
   captaToast('Promotor agregado','success');document.getElementById('addForm').reset();document.getElementById('zona_id').disabled=true;loadPromoters();
 });
@@ -348,7 +342,7 @@ async function openComerciosModal(promoterId,promoterName){
 async function cargarTablaComerciosAsignados(){
   const tbody=document.getElementById('cm_tabla_body');
   tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">Cargando…</td></tr>';
-  const{data,error}=await db.from('web_promotor_clientes').select('id,orden,activa,linea_id,web_clientes!web_promotor_clientes_cliente_id_fkey(id,trade_name,city),web_lineas!web_promotor_clientes_linea_id_fkey(nombre)').eq('empresa_id',empresaId).eq('promoter_id',cm_promoter_id).order('orden',{ascending:true,nullsFirst:false});
+  const{data,error}=await db.from('web_promotor_clientes').select('id,orden,activa,linea_id,cliente_id,web_clientes(id,trade_name,city),web_lineas(nombre)').eq('empresa_id',empresaId).eq('promoter_id',cm_promoter_id).order('orden',{ascending:true,nullsFirst:false});
   if(error){tbody.innerHTML='<tr><td colspan="6" style="color:var(--red);text-align:center;padding:20px">Error: '+error.message+'</td></tr>';return;}
   document.getElementById('cm_count_label').textContent=`${data?.length||0} comercios`;
   if(!data?.length){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">Sin comercios asignados — el promotor ve todos.</td></tr>';return;}
@@ -385,7 +379,7 @@ async function asignarComercio(){
   const orden=document.getElementById('cm_orden').value;
   hideMsg('cm_assign_error');hideMsg('cm_assign_ok');
   if(!cid){showMsg('cm_assign_error','Selecciona un comercio de la lista.');return;}
-  const{error}=await db.from('web_promotor_clientes').insert([{empresa_id:empresaId,promoter_id:cm_promoter_id,cliente_id:parseInt(cid),linea_id:lid,orden:orden?parseInt(orden):null,activa:true}]);
+  const{error}=await db.from('web_promotor_clientes').insert([{empresa_id:empresaId,promoter_id:cm_promoter_id,cliente_id:cid,linea_id:lid,orden:orden?parseInt(orden):null,activa:true}]);
   if(error){showMsg('cm_assign_error',error.message.includes('duplicate')?'Ya está asignado.':'Error: '+error.message);return;}
   showMsg('cm_assign_ok','Asignado correctamente.');
   document.getElementById('cm_search_input').value='';document.getElementById('cm_cliente_id_selected').value='';document.getElementById('cm_orden').value='';
