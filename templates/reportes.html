@@ -639,7 +639,7 @@ function renderKPIs(){
   const conf=filtData.filter(r=>isConfirmado(r)).length;
   const pctGPS=total?Math.round(conf/total*100):0;
   let sumUSD=0,cntUSD=0;
-  filtData.forEach(r=>parseJ(r.myitems).forEach(i=>{if(i.price&&i.currency&&i.presentation!=='SIN STOCK'){sumUSD+=toUSD(i.price,i.currency,r.created_at);cntUSD++;}}));
+  filtData.forEach(r=>parseJ(r.myitems).forEach(i=>{if(i.price&&i.presentation!=='SIN STOCK'){const u=toUSD(i.price,i.currency,r.created_at);if(u){sumUSD+=u;cntUSD++;}}}));
   const avgUSD=cntUSD?sumUSD/cntUSD:0;
   const metros=filtData.reduce((s,r)=>s+(parseFloat(r.shelf_meters)||0),0);
   let sinStock=0;
@@ -747,7 +747,7 @@ function renderPrecios(){
   const rows=[];
   filtData.forEach(r=>{
     parseJ(r.myitems).forEach(mi=>{
-      if(!mi.price||!mi.currency||mi.presentation==='SIN STOCK')return;
+      if(!mi.price||mi.presentation==='SIN STOCK')return;
       const nUSD=toUSD(mi.price,mi.currency,r.created_at);
       // buscar competidor vinculado en la misma visita
       const cis=parseJ(r.competitoritems);
