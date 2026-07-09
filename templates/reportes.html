@@ -275,11 +275,12 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(-
   </div>
   <div class="chart-card"><div class="chart-card-title">Detalle de quiebres</div>
     <div class="rp-tbl-wrap"><table class="rp-tbl" id="t-stk"><thead><tr><th>Fecha</th><th>Promotor</th><th>Comercio</th><th>Producto</th><th>Stock anaquel</th><th>Stock bodega</th></tr></thead><tbody></tbody></table></div>
+  </div>
   
-    <div class="chart-card" style="grid-column:1/-1">
-      <div class="chart-card-title">🚨 Comercios con mayor frecuencia de stock bajo <span>Requieren atención prioritaria</span></div>
-      <div id="sug-stock-bajo"><div style="color:var(--ink3);font-size:.82rem;text-align:center;padding:24px">Cargando...</div></div>
-    </div></div>
+  <div class="chart-card" style="grid-column:1/-1">
+    <div class="chart-card-title">🚨 Comercios con mayor frecuencia de stock bajo <span>Requieren atención prioritaria</span></div>
+    <div id="sug-stock-bajo"><div style="color:var(--ink3);font-size:.82rem;text-align:center;padding:24px">Cargando...</div></div>
+  </div>
 </div>
 
 <!-- ══ TAB: PROMOTORES ══ -->
@@ -485,27 +486,46 @@ const COLORS=['#4f46e5','#0891b2','#059669','#d97706','#dc2626','#7c3aed','#db27
 const tc=()=>'#64748b', gc=()=>'rgba(0,0,0,.05)';
 
 function toUSD(p,m,f){
-  if(!p) return 0;
+  if(!p && p!==0) return 0;
+  // Parse precio con formato latino robusto
   let s=String(p).replace(/[^0-9.,]/g,'').trim();
-  if(s.includes(',')&&s.includes('.')){const lc=s.lastIndexOf(','),ld=s.lastIndexOf('.');s=lc>ld?s.replace(/\./g,'').replace(',','.'):s.replace(/,/g,'');}
-  else if(s.includes(','))s=s.split(',')[1]?.length<=2?s.replace(',','.'):s.replace(/,/g,'');
+  if(!s) return 0;
+  if(s.includes(',')&&s.includes('.')){
+    const lc=s.lastIndexOf(','),ld=s.lastIndexOf('.');
+    s=lc>ld?s.replace(/\./g,'').replace(',','.'):s.replace(/,/g,'');
+  } else if(s.includes(',')){
+    const partes=s.split(',');
+    s=partes[1]&&partes[1].length<=2&&partes.length===2?s.replace(',','.'):s.replace(/,/g,'');
+  } else if(s.includes('.')){
+    const pts=s.split('.');
+    if(pts[pts.length-1].length===3&&pts.slice(0,-1).every(x=>x.length===3)&&pts.length>=2) s=s.replace(/\./g,'');
+  }
   const n=parseFloat(s)||0;
-  let mn=(m||'').toUpperCase();
-  const t=tasas.find(x=>new Date(x.fecha)<=new Date(f))||tasas[0];
-  if(!t) return 0;
+  if(n<=0) return 0;
   
-  // Detección automática: si no hay moneda y el precio es alto, inferir COP o Bs
-  if(!m && n > 500 && t){
-    const comoCOP = n / parseFloat(t.tasa_cop_usd);
-    if(comoCOP < 50) mn = 'COP';
-    else {
-      const comoBs = n / parseFloat(t.tasa_bs_usd);
-      if(comoBs < 200) mn = 'VES';
-    }
+  let mn=(m||'').trim().toUpperCase();
+  // Reconocer monedas
+  if(mn==='PESOS'||mn==='PESO'||mn==='COP'||mn==='COL') mn='COP';
+  else if(mn==='BS'||mn==='B$'||mn==='BS.'||mn==='VES'||mn==='VEF'||mn==='BOLIVARES'||mn==='BOLIVAR') mn='VES';
+  else if(mn==='USD'||mn==='US$'||mn==='DOLLAR'||mn==='DOLARES') mn='USD';
+  else if(mn==='$'||mn==='') mn='AUTO'; // ambiguo
+  
+  const t=tasas.find(x=>new Date(x.fecha)<=new Date(f))||tasas[0];
+  if(!t) return n;
+  
+  if(mn==='COP') return n/parseFloat(t.tasa_cop_usd);
+  if(mn==='VES') return n/parseFloat(t.tasa_bs_usd);
+  if(mn==='USD') return n;
+  
+  // AUTO: inferir
+  if(mn==='AUTO'){
+    const usdB=n/parseFloat(t.tasa_bs_usd);
+    const usdC=n/parseFloat(t.tasa_cop_usd);
+    if(usdB>=0.3&&usdB<=500) return usdB;
+    if(usdC>=0.01&&usdC<=100) return usdC;
+    return n>500 ? usdB : n;
   }
   
-  if(mn==='BS'||mn==='B$'||mn==='VES') return n/parseFloat(t.tasa_bs_usd);
-  if(mn==='COP'||mn==='PESOS') return n/parseFloat(t.tasa_cop_usd);
   return n;
 }
 
@@ -613,19 +633,41 @@ function haversineDist(lat1,lon1,lat2,lon2){
 }
 
 // Mapa de clientes con coordenadas (cargado una vez)
+// Doble índice: por ID y por trade_name (uppercase para case-insensitive)
 let clientesCoordMap = {};
+let clientesByTrade = {};
 async function loadClientesCoords(){
   try{
-    const {data}=await $db('web_clientes').select('id,latitude,longitude').eq('empresa_id',EID);
-    (data||[]).forEach(c=>{if(c.latitude&&c.longitude)clientesCoordMap[c.id]={lat:parseFloat(c.latitude),lon:parseFloat(c.longitude)};});
+    const {data}=await $db('web_clientes').select('id,trade_name,latitude,longitude').eq('empresa_id',EID);
+    (data||[]).forEach(c=>{
+      if(c.latitude&&c.longitude){
+        const coords={lat:parseFloat(c.latitude),lon:parseFloat(c.longitude)};
+        if(c.id) clientesCoordMap[c.id]=coords;
+        if(c.trade_name){
+          // Guardar versión normalizada (sin espacios ni acentos extra) y versión limpia
+          const tn=c.trade_name.trim();
+          clientesByTrade[tn]=coords;
+          clientesByTrade[tn.toUpperCase()]=coords;
+          clientesByTrade[tn.replace(/\s+/g,' ').toUpperCase()]=coords;
+        }
+      }
+    });
   }catch(e){console.warn('coords:',e);}
 }
 
 // Determinar si una visita está confirmada por GPS
 function isConfirmado(r){
-  if(!r.latitude||!r.longitude) return false;
-  const cli=clientesCoordMap[r.cliente_id];
+  if(!r.latitude||!r.longitude||(r.latitude==0&&r.longitude==0)) return false;
+  
+  // Buscar coordenadas del cliente: primero por ID, luego por trade
+  let cli=null;
+  if(r.cliente_id) cli=clientesCoordMap[r.cliente_id];
+  if(!cli&&r.trade){
+    const tn=(r.trade||'').trim().toUpperCase();
+    cli=clientesByTrade[tn]||clientesByTrade[tn.replace(/\s+/g,' ')];
+  }
   if(!cli) return false;
+  
   return haversineDist(parseFloat(r.latitude),parseFloat(r.longitude),cli.lat,cli.lon)<=150;
 }
 
