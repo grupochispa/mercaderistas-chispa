@@ -381,32 +381,91 @@ function parsePrecio(precio) {
   if (!precio && precio !== 0) return NaN;
   let s = String(precio).replace(/[^0-9.,]/g,'').trim();
   if (!s) return NaN;
+  
+  // Si tiene ambos . y , -> el último es el decimal
   if (s.includes(',') && s.includes('.')) {
-    const lc=s.lastIndexOf(','), ld=s.lastIndexOf('.');
-    s = lc > ld ? s.replace(/\./g,'').replace(',','.') : s.replace(/,/g,'');
-  } else if (s.includes(',')) {
-    const partes = s.split(',');
-    s = partes[1] && partes[1].length <= 2 ? s.replace(',','.') : s.replace(/,/g,'');
+    const lc = s.lastIndexOf(','), ld = s.lastIndexOf('.');
+    if (lc > ld) {
+      // coma es decimal, punto es miles. Ej: 1.500,25 -> 1500.25
+      s = s.replace(/\./g, '').replace(',', '.');
+    } else {
+      // punto es decimal, coma es miles. Ej: 1,500.25 -> 1500.25
+      s = s.replace(/,/g, '');
+    }
+    return parseFloat(s);
   }
+  
+  // Solo comas
+  if (s.includes(',')) {
+    const partes = s.split(',');
+    // Si la última parte tiene 3 dígitos y hay más de 1 coma -> es formato miles
+    // Si la última parte tiene 1-2 dígitos -> es decimal
+    const ultimaLen = partes[partes.length - 1].length;
+    if (ultimaLen <= 2 && partes.length === 2) {
+      // Decimal: 1,83 -> 1.83
+      s = s.replace(',', '.');
+    } else {
+      // Miles: 1,234 o 1,234,567 -> 1234 o 1234567
+      s = s.replace(/,/g, '');
+    }
+    return parseFloat(s);
+  }
+  
+  // Solo puntos
+  if (s.includes('.')) {
+    const partes = s.split('.');
+    const ultimaLen = partes[partes.length - 1].length;
+    // Si la última parte tiene 3 dígitos y las anteriores también 3 -> formato miles latino
+    // Ej: 66.000 -> 66000; 1.500.000 -> 1500000
+    // Pero 1.5 -> 1.5 (decimal normal)
+    const todasTres = partes.slice(0, -1).every(p => p.length === 3);
+    if (ultimaLen === 3 && todasTres && partes.length >= 2) {
+      // Formato latino: punto como miles
+      s = s.replace(/\./g, '');
+    }
+    // Si no, se asume decimal normal (ej: 1.5)
+    return parseFloat(s);
+  }
+  
   return parseFloat(s);
 }
+
 function convertirAPrecioUSD(precio, moneda, fecha, estado) {
   // Retorna { usd: number | null, monedaFinal: string, tasaUsada: number | null, convertido: boolean }
   if (!precio && precio !== 0) return { usd: null, monedaFinal: 'USD', tasaUsada: null, convertido: false };
   const n = parsePrecio(precio);
   if (isNaN(n) || n <= 0) return { usd: null, monedaFinal: 'USD', tasaUsada: null, convertido: false };
+  
+  const rawCurrency = String(moneda || '').trim().toUpperCase();
   let mn = normalizarMoneda(moneda);
   const t = obtenerTasa(fecha);
   
-  // Si la moneda no está especificada y el precio es alto, inferir automáticamente
-  if (mn === 'USD' && !moneda) {
-    if (n > 500 && t && t.tasa_cop_usd) {
-      const comoCOP = n / parseFloat(t.tasa_cop_usd);
-      if (comoCOP < 50) { mn = 'COP'; }
-      else if (t && t.tasa_bs_usd) {
-        const comoBs = n / parseFloat(t.tasa_bs_usd);
-        if (comoBs < 200) mn = 'Bs';
+  // Si la moneda es ambigua ($ solo), inferir según el valor y las tasas
+  if (rawCurrency === '$' || rawCurrency === '' || !rawCurrency) {
+    // Intentar inferir: si el número es grande, probablemente es Bs
+    if (t) {
+      const tasaBs = parseFloat(t.tasa_bs_usd);
+      const tasaCop = parseFloat(t.tasa_cop_usd);
+      
+      // Si el precio convertido a USD vía Bs da un valor razonable (0.5 - 500 USD)
+      const usdB = n / tasaBs;
+      const usdC = n / tasaCop;
+      
+      if (usdB >= 0.3 && usdB <= 500 && (usdC < 0.01 || usdC > 1000 || usdB < 100)) {
+        // Parece Bs
+        mn = 'Bs';
+      } else if (usdC >= 0.01 && usdC <= 100 && usdC < usdB) {
+        // Parece COP
+        mn = 'COP';
+      } else if (n > 1000 && usdB < 500) {
+        // Precio alto, asumir Bs
+        mn = 'Bs';
+      } else if (n < 100 && n > 0.1 && usdC > 0.005 && usdC < 10) {
+        // Precio bajo, podría ser COP
+        mn = 'COP';
       }
+    } else if (n > 500) {
+      mn = 'Bs'; // sin tasa, asumir Bs si es alto
     }
   }
   
@@ -415,11 +474,27 @@ function convertirAPrecioUSD(precio, moneda, fecha, estado) {
   
   if (mn === 'Bs') {
     const tasa = parseFloat(t.tasa_bs_usd);
-    return { usd: n / tasa, monedaFinal: 'Bs', tasaUsada: tasa, convertido: true };
+    const usd = n / tasa;
+    // Si el resultado es absurdo (>500 USD por unidad), probablemente ya está en USD
+    if (usd > 500 && n < 1000) {
+      return { usd: n, monedaFinal: 'USD', tasaUsada: null, convertido: false, inferido: true };
+    }
+    return { usd, monedaFinal: 'Bs', tasaUsada: tasa, convertido: true };
   }
   if (mn === 'COP') {
     const tasa = parseFloat(t.tasa_cop_usd);
-    return { usd: n / tasa, monedaFinal: 'COP', tasaUsada: tasa, convertido: true };
+    const usd = n / tasa;
+    // Si el resultado es < 0.005 USD, probablemente el precio ya está en USD
+    // o la moneda está mal etiquetada (ej: COP 1,83 debería ser 1830 COP = 0.55 USD)
+    if (usd < 0.005) {
+      // Asumir que el precio está en USD realmente
+      return { usd: n, monedaFinal: 'USD', tasaUsada: null, convertido: false, inferido: true, _rawCOP: usd };
+    }
+    if (usd > 500 && n < 100000) {
+      // El resultado en USD es muy alto, probablemente ya está en USD
+      return { usd: n, monedaFinal: 'USD', tasaUsada: null, convertido: false, inferido: true };
+    }
+    return { usd, monedaFinal: 'COP', tasaUsada: tasa, convertido: true };
   }
   return { usd: n, monedaFinal: mn, tasaUsada: null, convertido: false };
 }
