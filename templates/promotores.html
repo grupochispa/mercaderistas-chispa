@@ -32,6 +32,18 @@
         <div><label class="sp-label">Zona *</label><select id="zona_id" class="sp-select" disabled required><option value="">Seleccione…</option></select></div>
         <div><label class="sp-label">Clientes asignados</label><input type="number" id="clientes_asig" class="sp-input" min="0" value="0"></div>
         <div><label class="sp-label">Días de trabajo</label><input type="number" id="dias_trabajo" class="sp-input" min="0" value="0"></div>
+        <div>
+          <label class="sp-label" style="display:flex;align-items:center;gap:4px">
+            Clave PWA <span style="color:var(--red)">*</span>
+          </label>
+          <div style="position:relative">
+            <input type="password" id="add_password" class="sp-input" required placeholder="Mínimo 4 caracteres" autocomplete="new-password">
+            <button type="button" onclick="togglePassVis('add_password','eyeAdd')"
+              style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted);padding:0">
+              <i id="eyeAdd" class="fas fa-eye"></i>
+            </button>
+          </div>
+        </div>
       </div>
       <button type="submit" class="sp-btn sp-btn-primary"><i class="fas fa-plus"></i> Agregar Promotor</button>
     </form>
@@ -237,12 +249,14 @@ document.getElementById('addForm').addEventListener('submit',async e=>{
   e.preventDefault();
   const pid=document.getElementById('promoter_id').value.trim().toUpperCase();
   const pname=document.getElementById('promoter_name').value.trim().toUpperCase();
+  const passw=document.getElementById('add_password').value.trim();
   const estadoId=document.getElementById('estado_id').value;
   const zonaId=document.getElementById('zona_id').value;
   if(!pid||!pname||!estadoId){captaToast('Completa los campos requeridos','error');return;}
+  if(!passw||passw.length<4){captaToast('La clave PWA debe tener al menos 4 caracteres','error');return;}
   const{data:dup}=await db.from('web_promotores').select('id').eq('empresa_id',empresaId).eq('promoter_id',pid).maybeSingle();
   if(dup){captaToast(`El ID "${pid}" ya existe`,'warn');return;}
-  const{error}=await db.from('web_promotores').insert([{empresa_id:empresaId,promoter_id:pid,promoter_name:pname,estado_id:estadoId||null,zona_id:zonaId||null,clientes_asig:parseInt(document.getElementById('clientes_asig').value)||0,dias_trabajo:parseInt(document.getElementById('dias_trabajo').value)||0}]);
+  const{error}=await db.from('web_promotores').insert([{empresa_id:empresaId,promoter_id:pid,promoter_name:pname,password:passw,estado_id:estadoId||null,zona_id:zonaId||null,clientes_asig:parseInt(document.getElementById('clientes_asig').value)||0,dias_trabajo:parseInt(document.getElementById('dias_trabajo').value)||0}]);
   if(error){captaToast('Error: '+error.message,'error');return;}
   captaToast('Promotor agregado','success');document.getElementById('addForm').reset();document.getElementById('zona_id').disabled=true;loadPromoters();
 });
