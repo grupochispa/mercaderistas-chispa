@@ -318,8 +318,14 @@ async function saveEdit(){
   }
   pm.style.display = 'none';
 
+  const promoterName = document.getElementById('edit_promoter_name').value.trim().toUpperCase();
+  
+  // Validar duplicado por nombre excluyendo el registro actual
+  const{data:dupName}=await db.from('web_promotores').select('id').eq('empresa_id',empresaId).eq('promoter_name',promoterName).neq('id',id).maybeSingle();
+  if(dupName){captaToast(`Ya existe otro promotor con el nombre "${promoterName}"`,'warn');return;}
+
   const payload = {
-    promoter_name: document.getElementById('edit_promoter_name').value.trim().toUpperCase(),
+    promoter_name: promoterName,
     estado_id:     document.getElementById('edit_estado_id').value || null,
     zona_id:       document.getElementById('edit_zona_id').value   || null,
     clientes_asig: parseInt(document.getElementById('edit_clientes_asig').value) || 0,

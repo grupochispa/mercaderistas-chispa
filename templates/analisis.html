@@ -621,11 +621,245 @@ function drawChartComparativa() {
   });
 }
 
-function drawChartEvolucion() { console.log("Evolución - pendiente implementar"); }
-function drawChartZonas() { console.log("Zonas - pendiente implementar"); }
-function drawChartPromotores() { console.log("Promotores - pendiente implementar"); }
-function renderTablaComercio() { console.log("Tabla comercio - pendiente implementar"); }
+// ── Evolución en el tiempo ──
+function drawChartEvolucion() {
+  const producto = $('selectorProductoEvol').value;
+  const { tc, gc } = chartColors();
+  destroyChart('chartEvolucion');
+  if (!producto) return;
 
+  // Filtrar data: solo nuestro producto seleccionado, agrupar por fecha
+  const fechas = {};
+  nuestrosPrecios.forEach(f => {
+    if (f.nuestroProd !== producto) return;
+    const dia = f.fecha ? new Date(f.fecha).toISOString().split('T')[0] : 'sin-fecha';
+    if (!fechas[dia]) fechas[dia] = { n:[], c:[] };
+    fechas[dia].n.push(f.nUSD);
+  });
+  // También agregar datos de competencia si hay analisisData
+  analisisData.forEach(f => {
+    if (f.nuestroProd !== producto || !f.cUSD) return;
+    const dia = f.fecha ? new Date(f.fecha).toISOString().split('T')[0] : 'sin-fecha';
+    if (!fechas[dia]) fechas[dia] = { n:[], c:[] };
+    fechas[dia].c.push(f.cUSD);
+  });
+
+  const labels = Object.keys(fechas).sort();
+  if (!labels.length) return;
+
+  chartInst['chartEvolucion'] = new Chart($('chartEvolucion').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        { label:`${producto} (USD)`, data:labels.map(d=>+avg(fechas[d].n).toFixed(2)), borderColor:'#4f46e5', backgroundColor:'rgba(79,70,229,.1)', fill:true, tension:.3, pointRadius:4 },
+        { label:'Competidor (USD)', data:labels.map(d=>fechas[d].c.length ? +avg(fechas[d].c).toFixed(2) : null), borderColor:'#ef4444', backgroundColor:'rgba(239,68,68,.1)', fill:true, tension:.3, pointRadius:4, borderDash:[5,5] }
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins: { legend: { labels:{ color:tc, font:{size:11} }}},
+      scales: {
+        x: { ticks:{ color:tc, font:{size:10} }, grid:{color:gc} },
+        y: { ticks:{ color:tc, font:{size:10}, callback:v=>'$'+v.toFixed(2)}, grid:{color:gc} }
+      }
+    }
+  });
+}
+
+// ── Por zona / estado ──
+function drawChartZonas() {
+  const { tc, gc } = chartColors();
+  
+  // Agrupar por estado
+  const byEstado = {};
+  nuestrosPrecios.forEach(f => {
+    const st = f.state || 'Sin estado';
+    if (!byEstado[st]) byEstado[st] = { n:[], c:[] };
+    byEstado[st].n.push(f.nUSD);
+  });
+  analisisData.forEach(f => {
+    if (!f.cUSD) return;
+    const st = f.state || 'Sin estado';
+    if (!byEstado[st]) byEstado[st] = { n:[], c:[] };
+    byEstado[st].c.push(f.cUSD);
+  });
+
+  const estados = Object.keys(byEstado).sort();
+  destroyChart('chartZonaEstado');
+  if (estados.length) {
+    chartInst['chartZonaEstado'] = new Chart($('chartZonaEstado').getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: estados,
+        datasets: [
+          { label:'Nuestro (USD)', data:estados.map(e=>+avg(byEstado[e].n).toFixed(2)), backgroundColor:'rgba(79,70,229,.7)' },
+          { label:'Competidor (USD)', data:estados.map(e=>byEstado[e].c.length ? +avg(byEstado[e].c).toFixed(2) : 0), backgroundColor:'rgba(239,68,68,.6)' }
+        ]
+      },
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        plugins: { legend: { labels:{ color:tc, font:{size:11} }}},
+        scales: {
+          x: { ticks:{ color:tc, font:{size:9} }, grid:{color:gc} },
+          y: { ticks:{ color:tc, font:{size:9}, callback:v=>'$'+v.toFixed(2)}, grid:{color:gc} }
+        }
+      }
+    });
+  }
+
+  // Agrupar por zona
+  const byZona = {};
+  nuestrosPrecios.forEach(f => {
+    const zn = f.zone || 'Sin zona';
+    if (!byZona[zn]) byZona[zn] = { n:[], c:[] };
+    byZona[zn].n.push(f.nUSD);
+  });
+  analisisData.forEach(f => {
+    if (!f.cUSD) return;
+    const zn = f.zone || 'Sin zona';
+    if (!byZona[zn]) byZona[zn] = { n:[], c:[] };
+    byZona[zn].c.push(f.cUSD);
+  });
+
+  const zonas = Object.keys(byZona).sort();
+  destroyChart('chartZonaZona');
+  if (zonas.length) {
+    chartInst['chartZonaZona'] = new Chart($('chartZonaZona').getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: zonas,
+        datasets: [
+          { label:'Nuestro (USD)', data:zonas.map(z=>+avg(byZona[z].n).toFixed(2)), backgroundColor:'rgba(79,70,229,.7)' },
+          { label:'Competidor (USD)', data:zonas.map(z=>byZona[z].c.length ? +avg(byZona[z].c).toFixed(2) : 0), backgroundColor:'rgba(239,68,68,.6)' }
+        ]
+      },
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        plugins: { legend: { labels:{ color:tc, font:{size:11} }}},
+        scales: {
+          x: { ticks:{ color:tc, font:{size:9} }, grid:{color:gc} },
+          y: { ticks:{ color:tc, font:{size:9}, callback:v=>'$'+v.toFixed(2)}, grid:{color:gc} }
+        }
+      }
+    });
+  }
+}
+
+// ── Por promotor ──
+function drawChartPromotores() {
+  const { tc, gc } = chartColors();
+  
+  const byProm = {};
+  nuestrosPrecios.forEach(f => {
+    const p = f.promotor || 'Sin promotor';
+    if (!byProm[p]) byProm[p] = { n:[], c:[], reg:0 };
+    byProm[p].n.push(f.nUSD);
+    byProm[p].reg++;
+  });
+  analisisData.forEach(f => {
+    if (!f.cUSD) return;
+    const p = f.promotor || 'Sin promotor';
+    if (!byProm[p]) byProm[p] = { n:[], c:[], reg:0 };
+    byProm[p].c.push(f.cUSD);
+  });
+
+  const proms = Object.keys(byProm).sort();
+  // Gráfico
+  destroyChart('chartPromotores');
+  if (proms.length) {
+    chartInst['chartPromotores'] = new Chart($('chartPromotores').getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: proms,
+        datasets: [
+          { label:'Nuestro (USD)', data:proms.map(p=>+avg(byProm[p].n).toFixed(2)), backgroundColor:'rgba(79,70,229,.7)' },
+          { label:'Competidor (USD)', data:proms.map(p=>byProm[p].c.length ? +avg(byProm[p].c).toFixed(2) : 0), backgroundColor:'rgba(239,68,68,.6)' }
+        ]
+      },
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        indexAxis:'y',
+        plugins: { legend: { labels:{ color:tc, font:{size:11} }}},
+        scales: {
+          x: { ticks:{ color:tc, font:{size:9}, callback:v=>'$'+v.toFixed(2)}, grid:{color:gc} },
+          y: { ticks:{ color:tc, font:{size:9} }, grid:{color:gc} }
+        }
+      }
+    });
+  }
+
+  // Tabla
+  const promNames = Object.keys(byProm).sort();
+  const promAvg = promNames.map(p => avg(byProm[p].n));
+  const generalAvg = promAvg.length ? avg(promAvg) : 0;
+  
+  const tbody = $('tbodyPromotores');
+  tbody.innerHTML = promNames.map(p => {
+    const d = byProm[p];
+    const pN = avg(d.n);
+    const pC = d.c.length ? avg(d.c) : null;
+    const vsGen = generalAvg ? ((pN - generalAvg) / generalAvg * 100).toFixed(1) : '—';
+    const color = vsGen !== '—' ? (parseFloat(vsGen) > 5 ? '#DC2626' : parseFloat(vsGen) < -5 ? '#16A34A' : '#6B7280') : '#6B7280';
+    return `<tr class="row-hover">
+      <td class="py-3 px-4 font-medium">${p}</td>
+      <td class="py-3 px-4 text-center font-bold text-indigo-600">$${pN.toFixed(2)}</td>
+      <td class="py-3 px-4 text-center ${pC ? 'text-red-500' : 'text-gray-400'}">${pC ? '$'+pC.toFixed(2) : '—'}</td>
+      <td class="py-3 px-4 text-center text-gray-500">${d.reg}</td>
+      <td class="py-3 px-4 text-center font-semibold" style="color:${color}">${vsGen !== '—' ? (parseFloat(vsGen) > 0 ? '+' : '') + vsGen + '%' : '—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Por comercio ──
+function renderTablaComercio() {
+  const byTrade = {};
+  nuestrosPrecios.forEach(f => {
+    const t = f.trade || 'Sin comercio';
+    if (!byTrade[t]) byTrade[t] = { n:[], c:[], reg:0, state:f.state, zone:f.zone };
+    byTrade[t].n.push(f.nUSD);
+    byTrade[t].reg++;
+  });
+  analisisData.forEach(f => {
+    if (!f.cUSD) return;
+    const t = f.trade || 'Sin comercio';
+    if (!byTrade[t]) byTrade[t] = { n:[], c:[], reg:0, state:f.state, zone:f.zone };
+    byTrade[t].c.push(f.cUSD);
+  });
+
+  const trades = Object.keys(byTrade).sort();
+  tablaComercioData = trades.map(t => {
+    const d = byTrade[t];
+    const pN = avg(d.n);
+    const pC = d.c.length ? avg(d.c) : null;
+    const dif = pC ? ((pN - pC) / pC * 100) : null;
+    return { trade:t, state:d.state, zone:d.zone, pN, pC, dif, reg:d.reg };
+  });
+
+  renderTablaComercioFiltrada('');
+}
+
+function renderTablaComercioFiltrada(filtro) {
+  const fl = filtro.toLowerCase();
+  const datos = filtro ? tablaComercioData.filter(t => t.trade.toLowerCase().includes(fl)) : tablaComercioData;
+  const tbody = $('tbodyComercio');
+  tbody.innerHTML = datos.map(t => `
+    <tr class="row-hover">
+      <td class="py-3 px-4 font-medium">${t.trade}</td>
+      <td class="py-3 px-4 text-gray-500">${t.state || '—'}${t.zone && t.zone !== '—' ? ' / '+t.zone : ''}</td>
+      <td class="py-3 px-4 text-center font-bold text-indigo-600">$${t.pN.toFixed(2)}</td>
+      <td class="py-3 px-4 text-center ${t.pC ? 'text-red-500' : 'text-gray-400'}">${t.pC ? '$'+t.pC.toFixed(2) : '—'}</td>
+      <td class="py-3 px-4 text-center ${t.dif !== null ? (t.dif > 0 ? 'text-red-500' : 'text-green-500') : 'text-gray-400'}">${t.dif !== null ? (t.dif > 0 ? '+' : '') + t.dif.toFixed(1) + '%' : '—'}</td>
+      <td class="py-3 px-4 text-center text-gray-500">${t.reg}</td>
+    </tr>
+  `).join('');
+}
+
+function filtrarTablaComercio(term) {
+  renderTablaComercioFiltrada(term);
+}
+
+// ── Tabla detalle ──
 function renderTablaDetalle() {
   const filas = analisisData.length > 0 ? analisisData : nuestrosPrecios;
   const tbody = $('tbodyAnalisis');
