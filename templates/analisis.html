@@ -365,7 +365,7 @@ async function cargarTasas() {
   tasasCache = data || [];
 }
 function obtenerTasa(fechaStr) {
-  if (!tasasCache.length) return { tasa_bs_usd:36.5, tasa_cop_usd:4200 };
+  if (!tasasCache.length) return null;
   const sorted = [...tasasCache].sort((a,b) => new Date(b.fecha) - new Date(a.fecha));
   return sorted.find(t => new Date(t.fecha) <= new Date(fechaStr)) || sorted[0];
 }
@@ -393,10 +393,11 @@ function convertirAPrecioUSD(precio, moneda, fecha) {
   const n = parsePrecio(precio);
   if (isNaN(n) || n <= 0) return null;
   const mn = normalizarMoneda(moneda);
-  const t = obtenerTasa(fecha);
   if (mn === 'USD') return n;
-  if (mn === 'Bs') return n / parseFloat(t.tasa_bs_usd || 36.5);
-  if (mn === 'COP') return n / parseFloat(t.tasa_cop_usd || 4200);
+  const t = obtenerTasa(fecha);
+  if (!t) return null; // No hay tasa disponible → no se puede convertir
+  if (mn === 'Bs') return n / parseFloat(t.tasa_bs_usd);
+  if (mn === 'COP') return n / parseFloat(t.tasa_cop_usd);
   return n;
 }
 

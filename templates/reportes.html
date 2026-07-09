@@ -491,9 +491,10 @@ function toUSD(p,m,f){
   else if(s.includes(','))s=s.split(',')[1]?.length<=2?s.replace(',','.'):s.replace(/,/g,'');
   const n=parseFloat(s)||0;
   const mn=(m||'').toUpperCase();
-  const t=tasas.find(x=>new Date(x.fecha)<=new Date(f))||tasas[0]||{tasa_bs_usd:36.5,tasa_cop_usd:4200};
-  if(mn==='BS'||mn==='B$'||mn==='VES') return n/parseFloat(t.tasa_bs_usd||36.5);
-  if(mn==='COP'||mn==='PESOS') return n/parseFloat(t.tasa_cop_usd||4200);
+  const t=tasas.find(x=>new Date(x.fecha)<=new Date(f))||tasas[0];
+  if(!t) return 0; // No hay tasa → no se puede convertir
+  if(mn==='BS'||mn==='B$'||mn==='VES') return n/parseFloat(t.tasa_bs_usd);
+  if(mn==='COP'||mn==='PESOS') return n/parseFloat(t.tasa_cop_usd);
   return n;
 }
 
