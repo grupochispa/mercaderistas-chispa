@@ -372,10 +372,17 @@ function obtenerTasa(fechaStr) {
   return sorted.find(t => new Date(t.fecha) <= new Date(fechaStr)) || sorted[0];
 }
 function normalizarMoneda(m) {
-   if (!m) return 'USD';
+   if (!m) return '';
    const raw = String(m).trim().toUpperCase();
-   const map = { BS:'Bs','B$':'Bs','BS.':'Bs',VES:'Bs',VEF:'Bs',COP:'COP',COL:'COP',USD:'USD','US$':'USD','$':'COP' };
-   return map[raw] || (/^COP$/i.test(raw)?'COP':/^BS/i.test(raw)?'Bs':/^USD$/i.test(raw)?'USD':raw);
+   // Mapa de equivalencias
+   const map = { BS:'Bs','B$':'Bs','BS.':'Bs',VES:'Bs',VEF:'Bs',COP:'COP',COL:'COP',PESOS:'?','BOLIVARES':'Bs','BOLIVAR':'Bs','PESO':'?' };
+   if (map[raw]) return map[raw];
+   if (/^COP$/i.test(raw) || /^COL$/i.test(raw)) return 'COP';
+   if (/^BS/i.test(raw) || /^BOLIVAR/i.test(raw) || /^VES/i.test(raw) || /^VEF/i.test(raw)) return 'Bs';
+   if (/^PESO/i.test(raw)) return '?'; // ambiguo, necesita inferencia
+   if (/^USD$/i.test(raw) || /^US\$/i.test(raw) || /^DOLLAR/i.test(raw)) return 'USD';
+   if (/^\$$/.test(raw)) return '?'; // $ solo = ambiguo
+   return '?'; // desconocido, forzar inferencia
 }
 function parsePrecio(precio) {
   if (!precio && precio !== 0) return NaN;
@@ -440,42 +447,43 @@ function convertirAPrecioUSD(precio, moneda, fecha, estado) {
   let mn = normalizarMoneda(moneda);
   const t = obtenerTasa(fecha);
   
-  // Si la moneda es ambigua ($ solo), inferir según el valor y las tasas
-  if (rawCurrency === '$' || rawCurrency === '' || !rawCurrency) {
-    // Intentar inferir: si el número es grande, probablemente es Bs
+  // Si la moneda es ambigua o desconocida, inferir según el valor y las tasas
+  if (mn === '?' || rawCurrency === '$' || rawCurrency === '' || !rawCurrency) {
     if (t) {
       const tasaBs = parseFloat(t.tasa_bs_usd);
       const tasaCop = parseFloat(t.tasa_cop_usd);
-      
-      // Si el precio convertido a USD vía Bs da un valor razonable (0.5 - 500 USD)
       const usdB = n / tasaBs;
       const usdC = n / tasaCop;
       
-      if (usdB >= 0.3 && usdB <= 500 && (usdC < 0.01 || usdC > 1000 || usdB < 100)) {
-        // Parece Bs
-        mn = 'Bs';
-      } else if (usdC >= 0.01 && usdC <= 100 && usdC < usdB) {
-        // Parece COP
-        mn = 'COP';
-      } else if (n > 1000 && usdB < 500) {
-        // Precio alto, asumir Bs
-        mn = 'Bs';
-      } else if (n < 100 && n > 0.1 && usdC > 0.005 && usdC < 10) {
-        // Precio bajo, podría ser COP
-        mn = 'COP';
+      // Prioridad: el resultado que dé un precio en USD más razonable
+      if (usdB >= 0.3 && usdB <= 500) {
+        if (usdC < 0.01 || usdC > 100) {
+          mn = 'Bs'; // COP da absurdo, Bs da razonable
+        } else if (usdB < usdC && usdC > 50) {
+          mn = 'Bs'; // Bs da más barato, COP daría >50 USD = improbable
+        } else {
+          mn = 'Bs'; // default Venezuela = Bs
+        }
+      } else if (usdC >= 0.01 && usdC <= 100) {
+        mn = 'COP'; // Bs da absurdo, COP da razonable
+      } else if (n > 1000) {
+        mn = 'Bs'; // número grande, asumir Bs
+      } else if (n < 100 && n > 0.1) {
+        mn = 'COP'; // número pequeño, podría ser COP
+      } else {
+        mn = 'Bs'; // default
       }
-    } else if (n > 500) {
-      mn = 'Bs'; // sin tasa, asumir Bs si es alto
+    } else {
+      mn = n > 500 ? 'Bs' : 'USD';
     }
   }
   
-  if (mn === 'USD') return { usd: n, monedaFinal: 'USD', tasaUsada: null, convertido: false };
+  if (mn === 'USD' || mn === '?') return { usd: n, monedaFinal: 'USD', tasaUsada: null, convertido: false };
   if (!t) return { usd: null, monedaFinal: mn, tasaUsada: null, convertido: false, sinTasa: true };
   
   if (mn === 'Bs') {
     const tasa = parseFloat(t.tasa_bs_usd);
     const usd = n / tasa;
-    // Si el resultado es absurdo (>500 USD por unidad), probablemente ya está en USD
     if (usd > 500 && n < 1000) {
       return { usd: n, monedaFinal: 'USD', tasaUsada: null, convertido: false, inferido: true };
     }
@@ -484,14 +492,10 @@ function convertirAPrecioUSD(precio, moneda, fecha, estado) {
   if (mn === 'COP') {
     const tasa = parseFloat(t.tasa_cop_usd);
     const usd = n / tasa;
-    // Si el resultado es < 0.005 USD, probablemente el precio ya está en USD
-    // o la moneda está mal etiquetada (ej: COP 1,83 debería ser 1830 COP = 0.55 USD)
     if (usd < 0.005) {
-      // Asumir que el precio está en USD realmente
       return { usd: n, monedaFinal: 'USD', tasaUsada: null, convertido: false, inferido: true, _rawCOP: usd };
     }
     if (usd > 500 && n < 100000) {
-      // El resultado en USD es muy alto, probablemente ya está en USD
       return { usd: n, monedaFinal: 'USD', tasaUsada: null, convertido: false, inferido: true };
     }
     return { usd, monedaFinal: 'COP', tasaUsada: tasa, convertido: true };
