@@ -1,4 +1,4 @@
-from flask import Flask, render_template,flash, jsonify, request, session, redirect, url_for
+from flask import Flask, render_template, jsonify, request, session, redirect, url_for
 import requests
 import os
 import time
@@ -9,36 +9,27 @@ from functools import wraps
 
 app = Flask(__name__)
 
-# ─── Configuración de seguridad ───────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# CONFIGURACIÓN
+# ═══════════════════════════════════════════════════════════════════════════════
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'tu-clave-secreta-super-larga-y-segura-2025-xyz123')
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://czykohaerbcfpxenmssj.supabase.co")
 SUPABASE_KEY = os.getenv('SUPABASE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN6eWtvaGFlcmJjZnB4ZW5tc3NqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc4OTk5MDUsImV4cCI6MjA5MzQ3NTkwNX0.-emgKcogZ1cyG7tya4FN6FpAEu7TwUlFjUfwLcEMHHY')
 
-headers = {
+HEADERS = {
     "apikey": SUPABASE_KEY,
     "Authorization": f"Bearer {SUPABASE_KEY}",
     "Content-Type": "application/json",
     "Prefer": "count=exact"
 }
-def _supabase_error_msg(res):
-    try:
-        info = res.json()
-        msg  = info.get("message") or info.get("details") or info.get("hint") or res.text
-    except Exception:
-        msg = res.text or "Error desconocido"
-    # Traducir mensajes técnicos a algo legible
-    if "uix_myproductos_nombre_gramaje_empresa" in msg or "uix_competidor_nombre_gramaje_empresa" in msg:
-        return "Ya existe un producto con ese nombre y gramaje en tu empresa."
-    if "unique" in msg.lower():
-        return "Ya existe un producto con esos datos en tu empresa."
-    return msg
 
-# ─── Caché en memoria con TTL ─────────────────────────────────────────────────
-# { cache_key: { "data": ..., "ts": timestamp } }
+# ═══════════════════════════════════════════════════════════════════════════════
+# CACHÉ EN MEMORIA CON TTL
+# ═══════════════════════════════════════════════════════════════════════════════
 _cache: dict = {}
-CACHE_TTL_SECONDS = 120  # 2 minutos — configurable
-
+CACHE_TTL_SECONDS = 120          # datos dinámicos (records, stats)
+CACHE_STATIC_TTL = 3600          # datos semi-estáticos (estados, zonas)
 
 def cache_get(key: str):
     entry = _cache.get(key)
@@ -46,11 +37,15 @@ def cache_get(key: str):
         return entry["data"]
     return None
 
+def cache_get_static(key: str):
+    """Cache con TTL extendido para datos que cambian poco (estados, zonas)."""
+    entry = _cache.get(key)
+    if entry and (time.time() - entry["ts"]) < CACHE_STATIC_TTL:
+        return entry["data"]
+    return None
 
 def cache_set(key: str, data):
     _cache[key] = {"data": data, "ts": time.time()}
-
-
 
 def cache_invalidate_prefix(prefix: str):
     """Invalida todas las entradas que empiecen con prefix."""
@@ -58,8 +53,10 @@ def cache_invalidate_prefix(prefix: str):
     for k in keys_to_del:
         del _cache[k]
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# DECORADORES
+# ═══════════════════════════════════════════════════════════════════════════════
 
-# ─── Decorador de sesión ──────────────────────────────────────────────────────
 def require_session(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
@@ -69,10 +66,143 @@ def require_session(f):
     return wrapper
 
 
-# ─── Utilidades ───────────────────────────────────────────────────────────────
+# ── Aliases de módulos (compatibilidad vieja ↔ nueva) ─────────────────────────
+_MOD_ALIASES = {
+    'gps':              ['gps_verificacion'],
+    'gps_verificacion': ['gps'],
+    'analisis_precios': ['analisis'],
+    'analisis':         ['analisis_precios'],
+}
+
+def get_empresa_modulos() -> dict:
+    """Retorna SIEMPRE un dict {key: True} de modulos_activos.
+    Compatible con array text[] (Chispa) y JSONB objeto (legacy)."""
+    empresa_id = session.get('empresa_id')
+    if not empresa_id:
+        return {}
+    url = f"{SUPABASE_URL}/rest/v1/empresas?id=eq.{empresa_id}&select=modulos_activos"
+    try:
+        resp = requests.get(url, headers=HEADERS, timeout=5)
+        if resp.ok and resp.json():
+            raw = resp.json()[0].get('modulos_activos')
+            if not raw:
+                return {}
+            if isinstance(raw, list):
+                return {k: True for k in raw if isinstance(k, str)}
+            if isinstance(raw, str):
+                parsed = json.loads(raw)
+                if isinstance(parsed, list):
+                    return {k: True for k in parsed if isinstance(k, str)}
+                return parsed
+            return raw
+    except Exception:
+        pass
+    return {}
+
+def modulo_activo(key: str) -> bool:
+    """Retorna True si el módulo está activo para la empresa actual."""
+    mods = get_empresa_modulos()
+    if not mods:
+        return True  # sin restricciones → acceso total
+    if mods.get(key) is True:
+        return True
+    for alias in _MOD_ALIASES.get(key, []):
+        if mods.get(alias) is True:
+            return True
+    return False
+
+def require_modulo(key):
+    """Decorador que bloquea una ruta si el módulo no está activo."""
+    def decorator(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            if 'empresa_id' not in session:
+                return redirect(url_for('login'))
+            if not modulo_activo(key):
+                return render_template('modulo_bloqueado.html', modulo=key), 403
+            return f(*args, **kwargs)
+        return wrapper
+    return decorator
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# UTILIDADES
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def supabase_url(table: str) -> str:
+    """Construye URL base para la REST API de Supabase."""
+    return f"{SUPABASE_URL}/rest/v1/{table}"
+
+def _supabase_error_msg(res) -> str:
+    """Traduce errores de Supabase a mensajes legibles para el usuario."""
+    try:
+        info = res.json()
+        msg = info.get("message") or info.get("details") or info.get("hint") or res.text
+    except Exception:
+        msg = res.text or "Error desconocido"
+    if "uix_myproductos_nombre_gramaje_empresa" in msg or "uix_competidor_nombre_gramaje_empresa" in msg:
+        return "Ya existe un producto con ese nombre y gramaje en tu empresa."
+    if "unique" in msg.lower():
+        return "Ya existe un producto con esos datos en tu empresa."
+    return msg
+
+def _verificar_propiedad(table: str, record_id, empresa_id):
+    """Verifica que un registro pertenece a la empresa. Retorna (ok, error_tuple)."""
+    check = requests.get(
+        f"{supabase_url(table)}?id=eq.{record_id}&empresa_id=eq.{empresa_id}&select=id",
+        headers=HEADERS, timeout=10
+    )
+    if not check.ok or not check.json():
+        return False, (jsonify({"error": "Registro no encontrado o sin permiso"}), 404)
+    return True, None
+
+def _crear_producto(table: str, data: dict):
+    """Lógica común para crear productos (myproductos / competidor)."""
+    empresa_id = data.get("empresa_id")
+    presentation = data.get("presentation", "").strip().upper()
+    if not presentation:
+        return jsonify({"error": "El nombre del producto es requerido"}), 400
+    if not empresa_id:
+        return jsonify({"error": "empresa_id es requerido"}), 400
+
+    payload = {"presentation": presentation, "empresa_id": empresa_id}
+    if data.get("gramaje") is not None:
+        payload["gramaje"] = float(data["gramaje"])
+    if data.get("unidad"):
+        payload["unidad"] = data["unidad"]
+    if data.get("linea_id"):
+        payload["linea_id"] = data["linea_id"]
+
+    res = requests.post(supabase_url(table), headers=HEADERS, json=payload, timeout=10)
+    if res.status_code in (200, 201):
+        return jsonify({"success": True}), 201
+    return jsonify({"error": _supabase_error_msg(res)}), res.status_code
+
+def _actualizar_o_eliminar(table: str, record_id, empresa_id, method: str, data: dict = None):
+    """Lógica común para PATCH/DELETE de productos (myproductos / competidor)."""
+    ok, err = _verificar_propiedad(table, record_id, empresa_id)
+    if not ok:
+        return err
+
+    op_url = f"{supabase_url(table)}?id=eq.{record_id}&empresa_id=eq.{empresa_id}"
+    try:
+        if method == 'PATCH':
+            payload = {k: v for k, v in data.items() if k != 'empresa_id'}
+            if 'gramaje' in payload and payload['gramaje'] is not None:
+                payload['gramaje'] = float(payload['gramaje'])
+            res = requests.patch(op_url, headers=HEADERS, json=payload, timeout=10)
+        else:
+            res = requests.delete(op_url, headers=HEADERS, timeout=10)
+
+        if res.status_code in (200, 204):
+            return jsonify({"success": True}), (200 if method == 'PATCH' else 204)
+        return jsonify({"error": _supabase_error_msg(res)}), res.status_code
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 def fetch_table(table_name, params=None, empresa_id=None, limit=1000):
     """Fetch paginado contra Supabase REST API."""
-    url = f"{SUPABASE_URL}/rest/v1/{table_name}"
+    url = supabase_url(table_name)
     all_data = []
     offset = 0
     query_params = list(params or [])
@@ -81,7 +211,7 @@ def fetch_table(table_name, params=None, empresa_id=None, limit=1000):
         query_params.append(("empresa_id", f"eq.{empresa_id}"))
 
     while True:
-        h = {**headers, "Range": f"{offset}-{offset + limit - 1}"}
+        h = {**HEADERS, "Range": f"{offset}-{offset + limit - 1}"}
         try:
             resp = requests.get(url, headers=h, params=query_params, timeout=10)
             resp.raise_for_status()
@@ -95,27 +225,17 @@ def fetch_table(table_name, params=None, empresa_id=None, limit=1000):
         except requests.RequestException as e:
             print(f"[fetch_table] Error tabla {table_name}: {e}")
             break
-
     return all_data
 
-
 def fetch_table_page(table_name, params, page: int, page_size: int):
-    """
-    Fetch de UNA página específica con count total.
-    Retorna (data, total_count).
-    """
-    url = f"{SUPABASE_URL}/rest/v1/{table_name}"
+    """Fetch de UNA página específica con count total. Retorna (data, total_count)."""
+    url = supabase_url(table_name)
     offset = (page - 1) * page_size
-    h = {
-        **headers,
-        "Range": f"{offset}-{offset + page_size - 1}",
-        "Prefer": "count=exact"
-    }
+    h = {**HEADERS, "Range": f"{offset}-{offset + page_size - 1}", "Prefer": "count=exact"}
     try:
         resp = requests.get(url, headers=h, params=params, timeout=10)
         resp.raise_for_status()
         data = resp.json()
-        # Supabase devuelve Content-Range: 0-24/1000
         content_range = resp.headers.get("Content-Range", "")
         total = 0
         if "/" in content_range:
@@ -128,24 +248,24 @@ def fetch_table_page(table_name, params, page: int, page_size: int):
         print(f"[fetch_table_page] Error: {e}")
         return [], 0
 
-
 def calculate_distance(lat1, lon1, lat2, lon2) -> float:
+    """Distancia en metros entre dos coordenadas (fórmula Haversine)."""
     R = 6371000.0
     d_lat = radians(lat2 - lat1)
     d_lon = radians(lon2 - lon1)
     a = sin(d_lat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(d_lon / 2) ** 2
     return R * 2 * atan2(sqrt(a), sqrt(1 - a))
 
-
 def get_week_date_range(year: int, week_number: int):
+    """Retorna (fecha_inicio, fecha_fin) para una semana ISO."""
     jan4 = datetime(year, 1, 4)
     monday_w1 = jan4 - timedelta(days=jan4.weekday())
     start = monday_w1 + timedelta(weeks=week_number - 1)
     end = start + timedelta(days=6)
     return start.strftime('%Y-%m-%d'), end.strftime('%Y-%m-%d')
 
-
 def safe_json_parse(value):
+    """Convierte un valor (str/None/list) a una lista Python de forma segura."""
     if value is None:
         return []
     if isinstance(value, list):
@@ -158,8 +278,8 @@ def safe_json_parse(value):
             return []
     return []
 
-
 def safe_float(value, default=None):
+    """Convierte a float de forma segura, sin excepciones."""
     if value is None:
         return default
     try:
@@ -167,155 +287,111 @@ def safe_float(value, default=None):
     except (ValueError, TypeError):
         return default
 
-
 def get_current_empresa():
+    """Obtiene datos básicos de la empresa en sesión."""
     empresa_id = session.get('empresa_id')
     if not empresa_id:
         return None
-    url = f"{SUPABASE_URL}/rest/v1/empresas?id=eq.{empresa_id}&select=id,nombre,planogram_image"
-    resp = requests.get(url, headers=headers, timeout=5)
+    url = f"{supabase_url('empresas')}?id=eq.{empresa_id}&select=id,nombre,planogram_image"
+    resp = requests.get(url, headers=HEADERS, timeout=5)
     if resp.status_code == 200 and resp.json():
         return resp.json()[0]
     return None
-def get_empresa_modulos():
-    """Retorna SIEMPRE un dict {key: True} de modulos_activos.
-    Compatible con array text[] (Chispa) y JSONB objeto (legacy).
-    """
-    empresa_id = session.get('empresa_id')
-    if not empresa_id:
-        return None
-    url = f"{SUPABASE_URL}/rest/v1/empresas?id=eq.{empresa_id}&select=modulos_activos"
-    try:
-        resp = requests.get(url, headers=headers, timeout=5)
-        if resp.ok and resp.json():
-            raw = resp.json()[0].get('modulos_activos')
-            if not raw:
-                return {}
-            # array text[] → convertir a dict {key: True}
-            if isinstance(raw, list):
-                return {k: True for k in raw if isinstance(k, str)}
-            # string JSON → parsear
-            if isinstance(raw, str):
-                import json as _json
-                parsed = _json.loads(raw)
-                if isinstance(parsed, list):
-                    return {k: True for k in parsed if isinstance(k, str)}
-                return parsed  # ya es dict
-            # ya es dict {key: True}
-            return raw
-    except Exception:
-        pass
-    return {}
- 
-# ─── ALIASES DE MÓDULOS (Compatibilidad vieja ↔ nueva) ─────────────────────
-_MOD_ALIASES = {
-    # GPS
-    'gps':              ['gps_verificacion'],
-    'gps_verificacion': ['gps'],
-    
-    # Análisis
-    'analisis_precios': ['analisis'],
-    'analisis':         ['analisis_precios'],
-}
 
-def modulo_activo(key: str) -> bool:
-    """
-    Retorna True si el módulo está activo para la empresa actual.
-    Soporta tanto las claves antiguas como las nuevas.
-    """
-    mods = get_empresa_modulos()
-    
-    # Si no hay restricciones de módulos (empresas antiguas), dar acceso total
-    if not mods or len(mods) == 0:
-        return True
-    
-    # 1. Verificar clave exacta
-    if mods.get(key) is True:
-        return True
-    
-    # 2. Verificar aliases (compatibilidad)
-    for alias in _MOD_ALIASES.get(key, []):
-        if mods.get(alias) is True:
-            return True
-    
-    return False
- 
-def require_modulo(key):
-    """Decorador que bloquea una ruta si el módulo no está activo."""
-    from functools import wraps
-    def decorator(f):
-        @wraps(f)
-        def wrapper(*args, **kwargs):
-            if 'empresa_id' not in session:
-                return redirect(url_for('login'))
-            if not modulo_activo(key):
-                return render_template('modulo_bloqueado.html', modulo=key), 403
-            return f(*args, **kwargs)
-        return wrapper
-    return decorator
-
-
-def process_record(record: dict, clientes_by_trade: dict) -> dict:
-    """Convierte un raw record de Supabase al formato que espera el dashboard."""
-    promoter_info = record.get('web_promotores') or {}
-    visit_lat = safe_float(record.get("latitude"))
-    visit_lon = safe_float(record.get("longitude"))
-
-    trade_name = (record.get("trade") or "").strip().upper()
-    cliente_data = clientes_by_trade.get(trade_name)
-
+def _compute_verification(visit_lat, visit_lon, cliente_data):
+    """Calcula distancia y estado de verificación para una visita.
+    Retorna (distance, verified_status, cliente_coords_str)."""
     distance = 0.0
-    verified_status = "Cliente Desconocido"
+    verified_status = "Sin Coords Cliente"
     cliente_coords_str = "N/A"
-    visit_coords_str = "N/A"
-
-    if visit_lat is not None and visit_lon is not None:
-        visit_coords_str = f"{visit_lat:.5f}, {visit_lon:.5f}"
-        verified_status = "Sin Coordenadas Cliente"
 
     if cliente_data:
         c_lat = safe_float(cliente_data.get("latitude"), 0.0)
         c_lon = safe_float(cliente_data.get("longitude"), 0.0)
         if c_lat != 0.0:
             cliente_coords_str = f"{c_lat:.5f}, {c_lon:.5f}"
-        if visit_lat is not None and visit_lon is not None and c_lat != 0.0:
+        if visit_lat is None or visit_lon is None:
+            verified_status = "Sin GPS Visita"
+        elif c_lat == 0.0 or c_lon == 0.0:
+            verified_status = "Sin Coords Cliente"
+        else:
             try:
                 distance = calculate_distance(visit_lat, visit_lon, c_lat, c_lon)
                 verified_status = "Confirmado" if distance <= 150 else "No Confirmado"
             except Exception:
-                verified_status = "Error distancia"
-        elif visit_lat is None or visit_lon is None:
-            verified_status = "Sin GPS Visita"
+                verified_status = "Error cálculo distancia"
+    elif visit_lat is not None and visit_lon is not None:
+        verified_status = "Sin Coords Cliente"
+
+    return distance, verified_status, cliente_coords_str
+
+def _format_record(record, clientes_by_id, clientes_by_trade):
+    """Convierte un raw record de Supabase al formato que espera el dashboard."""
+    visit_lat = safe_float(record.get("latitude"))
+    visit_lon = safe_float(record.get("longitude"))
+
+    # Buscar cliente asociado
+    trade_visita = (record.get("trade") or "").strip().upper()
+    cliente_id_raw = record.get("cliente_id")
+    cliente_data = None
+    if cliente_id_raw is not None:
+        cliente_data = clientes_by_id.get(str(cliente_id_raw)) or clientes_by_id.get(cliente_id_raw)
+    if not cliente_data and trade_visita:
+        cliente_data = clientes_by_trade.get(trade_visita)
+
+    distance, verified_status, cliente_coords_str = _compute_verification(visit_lat, visit_lon, cliente_data)
 
     return {
-        "id": record.get("id"),
-        "created_at": record.get("created_at"),
-        "promoter_name": promoter_info.get('promoter_name', "Sin Nombre"),
-        "state": record.get("state", "N/A"),
-        "zone": record.get("zone", "N/A"),
-        "trade": record.get("trade", "N/A"),
-        "distance": round(distance, 2),
-        "verified": verified_status,
-        "visit_coords": visit_coords_str,
+        "id":              record.get("id"),
+        "created_at":      record.get("created_at"),
+        "promoter_name":   record.get("promoter_name") or "Sin Nombre",
+        "promoter_id":     record.get("promoter_id"),
+        "state":           record.get("state", "N/A"),
+        "zone":            record.get("zone", "N/A"),
+        "trade":           record.get("trade", "N/A"),
+        "linea_id":        record.get("linea_id"),
+        "linea_nombre":    record.get("linea_nombre"),
+        "shelf_meters":    record.get("shelf_meters"),
+        "p_mayorista":     record.get("p_mayorista"),
+        "cliente_cerrado": record.get("cliente_cerrado"),
+        "our_faces_after":          record.get("our_faces_after"),
+        "our_faces_before_counted": record.get("our_faces_before_counted"),
+        "our_faces_before_manual":  record.get("our_faces_before_manual"),
+        "total_faces":              record.get("total_faces"),
+        "total_faces_before":       record.get("total_faces_before"),
+        "distance":      round(distance, 2) if distance else 0,
+        "verified":      verified_status,
+        "latitude":      visit_lat,
+        "longitude":     visit_lon,
         "client_coords": cliente_coords_str,
-        "latitude": visit_lat,
-        "longitude": visit_lon,
-        "comments": record.get("comments", ""),
-        "p_mayorista": record.get("p_mayorista", "No"),
-        "cliente_cerrado": record.get("cliente_cerrado", "No"),
-        "total_faces_before": record.get("total_faces_before"),
-        "total_faces": record.get("total_faces"),
-        "our_faces_before_manual": record.get("our_faces_before_manual"),
-        "our_faces_after": record.get("our_faces_after"),
-        "myitems": safe_json_parse(record.get("myitems")),
-        "competitoritems": safe_json_parse(record.get("competitoritems")),
-        "before_photos": safe_json_parse(record.get("before_photos")),
-        "after_photos": safe_json_parse(record.get("after_photos")),
+        "myitems":          safe_json_parse(record.get("myitems")),
+        "competitoritems":  safe_json_parse(record.get("competitoritems")),
+        "before_photos":    safe_json_parse(record.get("before_photos")),
+        "after_photos":     safe_json_parse(record.get("after_photos")),
+        "comments":         record.get("comments"),
+        "espacios_adicionales": safe_json_parse(record.get("espacios_adicionales")),
     }
 
+def _build_cliente_indexes(clientes_todos):
+    """Construye índices id→cliente y trade_name→cliente."""
+    by_id = {}
+    by_trade = {}
+    for c in clientes_todos:
+        cid = c.get("id")
+        if cid is not None:
+            try:
+                by_id[int(cid)] = c
+            except Exception:
+                pass
+            by_id[str(cid)] = c
+        trade = (c.get("trade_name") or "").strip().upper()
+        if trade:
+            by_trade[trade] = c
+    return by_id, by_trade
 
-def build_records_params(empresa_id, date_from=None, date_to=None,
-                         promoter_id=None, week=None, year=None):
+def _build_record_params(empresa_id, date_from=None, date_to=None,
+                         promoter_id=None, week=None, year=None,
+                         linea_id=None, trade=None):
     """Construye la lista de params para query a web_precios."""
     year = year or datetime.now().year
     params = [
@@ -339,9 +415,12 @@ def build_records_params(empresa_id, date_from=None, date_to=None,
 
     if promoter_id and promoter_id != 'all':
         params.append(("promoter_id", f"eq.{promoter_id}"))
+    if linea_id and linea_id != 'all':
+        params.append(("linea_id", f"eq.{linea_id}"))
+    if trade and trade != 'all':
+        params.append(("trade", f"eq.{trade}"))
 
     return params
-
 
 # ─── Rutas de vistas ──────────────────────────────────────────────────────────
 
@@ -467,7 +546,7 @@ def login():
                f"&limit=10")
  
         try:
-            response = requests.get(url, headers=headers)
+            response = requests.get(url, headers=HEADERS)
             if response.status_code != 200:
                 return render_template('login.html', error='Error de conexión con la base de datos')
  
@@ -613,47 +692,19 @@ def get_records():
     promoter_id = request.args.get('promoter_id')
     week        = request.args.get('week')
     year_str    = request.args.get('year', str(datetime.now().year))
-
-    # ── Nuevos filtros ────────────────────────────────────────────────
-    linea_id_filter = request.args.get('linea_id', '').strip()
-    trade_filter    = request.args.get('trade', '').strip()
-
-    params = [
-        ("select", "*"),
-        ("order",      "created_at.desc"),
-        ("empresa_id", f"eq.{empresa_id}")
-    ]
+    linea_id    = request.args.get('linea_id', '').strip()
+    trade       = request.args.get('trade', '').strip()
 
     try:
         year = int(year_str)
     except Exception:
         year = datetime.now().year
 
-    # ── Rango de fechas ───────────────────────────────────────────────
-    if week:
-        try:
-            week_num = int(week)
-            date_from, date_to = get_week_date_range(year, week_num)
-            params.append(("created_at", f"gte.{date_from}T00:00:00+00:00"))
-            params.append(("created_at", f"lte.{date_to}T23:59:59+00:00"))
-        except Exception as e:
-            print(f"Error calculando semana {week}/{year}: {e}")
-            return jsonify({"error": "Rango de semana inválido"}), 400
-    elif date_from:
-        params.append(("created_at", f"gte.{date_from}T00:00:00+00:00"))
-
-    if date_to and not week:
-        params.append(("created_at", f"lte.{date_to}T23:59:59+00:00"))
-
-    # ── Filtros individuales ──────────────────────────────────────────
-    if promoter_id and promoter_id != 'all':
-        params.append(("promoter_id", f"eq.{promoter_id}"))
-
-    if linea_id_filter and linea_id_filter != 'all':
-        params.append(("linea_id", f"eq.{linea_id_filter}"))
-
-    if trade_filter and trade_filter != 'all':
-        params.append(("trade", f"eq.{trade_filter}"))
+    params = _build_record_params(
+        empresa_id, date_from=date_from, date_to=date_to,
+        promoter_id=promoter_id, week=week, year=year,
+        linea_id=linea_id, trade=trade
+    )
 
     # ── Consultas paralelas ───────────────────────────────────────────
     records_raw    = fetch_table("web_precios",    params=params)
@@ -665,105 +716,19 @@ def get_records():
     lineas         = fetch_table("web_lineas",     empresa_id=empresa_id,
                                  params=[("activa", "eq.true"), ("order", "nombre.asc")])
 
-    # Mapa id → cliente Y trade_name → cliente para cálculo de distancia
-    clientes_by_id = {}
-    clientes_by_trade = {}
-    for c in clientes_todos:
-        cid = c.get("id")
-        if cid is not None:
-            try:
-                clientes_by_id[int(cid)] = c
-            except Exception:
-                pass
-            clientes_by_id[str(cid)] = c
-        trade = (c.get("trade_name") or "").strip().upper()
-        if trade:
-            clientes_by_trade[trade] = c
+    # Construir índices de clientes
+    clientes_by_id, clientes_by_trade = _build_cliente_indexes(clientes_todos)
 
-    # ── Formatear registros ───────────────────────────────────────────
+    # Formatear registros usando el helper unificado
     formatted_records = []
-
     for record in records_raw:
         try:
-            promoter_info = {}  # promoter_name viene directo en web_precios
-
-            visit_lat = safe_float(record.get("latitude"))
-            visit_lon = safe_float(record.get("longitude"))
-
-            # Buscar cliente por trade_name (app móvil no guarda cliente_id)
-            trade_visita = (record.get("trade") or "").strip().upper()
-            cliente_id_raw = record.get("cliente_id")
-            cliente_data = None
-            if cliente_id_raw is not None:
-                cliente_data = clientes_by_id.get(str(cliente_id_raw)) or clientes_by_id.get(cliente_id_raw)
-            if not cliente_data and trade_visita:
-                cliente_data = clientes_by_trade.get(trade_visita)
-            distance          = 0.0
-            verified_status   = "Sin Coords Cliente"
-            cliente_coords_str = "N/A"
-
-            if cliente_data:
-                c_lat = safe_float(cliente_data.get("latitude"), 0.0)
-                c_lon = safe_float(cliente_data.get("longitude"), 0.0)
-
-                if c_lat != 0.0:
-                    cliente_coords_str = f"{c_lat:.5f}, {c_lon:.5f}"
-
-                if visit_lat is None or visit_lon is None:
-                    verified_status = "Sin GPS Visita"
-                elif c_lat == 0.0 or c_lon == 0.0:
-                    # Cliente existe pero sin coordenadas — GPS del promotor registrado igual
-                    verified_status = "Sin Coords Cliente"
-                else:
-                    try:
-                        distance = calculate_distance(visit_lat, visit_lon, c_lat, c_lon)
-                        verified_status = "Confirmado" if distance <= 150 else "No Confirmado"
-                    except Exception as dist_err:
-                        print(f"Error distancia registro {record.get('id')}: {dist_err}")
-                        verified_status = "Error cálculo distancia"
-            elif visit_lat is not None and visit_lon is not None:
-                # Comercio no registrado en web_clientes pero tiene GPS — marcar como registrado
-                verified_status = "Sin Coords Cliente"
-
-            formatted_records.append({
-                "id":              record.get("id"),
-                "created_at":      record.get("created_at"),
-                "promoter_name":   record.get("promoter_name") or promoter_info.get("promoter_name", "Sin Nombre"),
-                "promoter_id":     record.get("promoter_id"),
-                "state":           record.get("state", "N/A"),
-                "zone":            record.get("zone", "N/A"),
-                "trade":           record.get("trade", "N/A"),
-                # ── campos sincronizados con PWA ──────────────────────
-                "linea_id":        record.get("linea_id"),
-                "linea_nombre":    record.get("linea_nombre"),
-                "shelf_meters":    record.get("shelf_meters"),
-                "p_mayorista":     record.get("p_mayorista"),
-                "cliente_cerrado": record.get("cliente_cerrado"),
-                # ── caras ─────────────────────────────────────────────
-                "our_faces_after":          record.get("our_faces_after"),
-                "our_faces_before_counted": record.get("our_faces_before_counted"),
-                "our_faces_before_manual":  record.get("our_faces_before_manual"),
-                "total_faces":              record.get("total_faces"),
-                "total_faces_before":       record.get("total_faces_before"),
-                # ── geo ───────────────────────────────────────────────
-                "distance":      round(distance, 2) if distance else 0,
-                "verified":      verified_status,
-                "latitude":      visit_lat,
-                "longitude":     visit_lon,
-                "client_coords": cliente_coords_str,
-                # ── items ─────────────────────────────────────────────
-                "myitems":          safe_json_parse(record.get("myitems")),
-                "competitoritems":  safe_json_parse(record.get("competitoritems")),
-                "before_photos":    safe_json_parse(record.get("before_photos")),
-                "after_photos":     safe_json_parse(record.get("after_photos")),
-                "comments":         record.get("comments"),
-                "espacios_adicionales": safe_json_parse(record.get("espacios_adicionales")),
-            })
-
+            formatted_records.append(_format_record(record, clientes_by_id, clientes_by_trade))
         except Exception as e:
             print(f"Error procesando registro {record.get('id', 'sin-id')}: {e}")
             continue
 
+    # Deduplicar promotores
     seen = set()
     promotores_unicos = []
     for p in promotores:
@@ -774,7 +739,7 @@ def get_records():
  
     return jsonify({
         "records":   formatted_records,
-        "promoters": promotores_unicos,   # ← deduplicado
+        "promoters": promotores_unicos,
         "estados":   estados,
         "zonas":     zonas,
         "lineas":    lineas,
@@ -866,7 +831,7 @@ def delete_records():
 
     id_list = ",".join(map(str, ids))
     url = f"{SUPABASE_URL}/rest/v1/web_precios?id=in.({id_list})&empresa_id=eq.{empresa_id}"
-    res = requests.delete(url, headers=headers, timeout=10)
+    res = requests.delete(url, headers=HEADERS, timeout=10)
 
     if res.ok:
         # Invalida caché de esta empresa
@@ -878,184 +843,72 @@ def delete_records():
 
 
 
-# ──────────────────────────────────────────────────────────────────────
-# PRODUCTOS COMPETENCIA
-# ──────────────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# API: PRODUCTOS COMPETENCIA
+# ═══════════════════════════════════════════════════════════════════════════════
 @app.route('/api/competitorproducts', methods=['GET', 'POST'])
 def handle_competitor_products():
-
     if request.method == 'GET':
         empresa_id = request.args.get('empresa_id')
         if not empresa_id:
             return jsonify({"error": "empresa_id es requerido"}), 400
 
         res = requests.get(
-            f"{SUPABASE_URL}/rest/v1/web_competidor"
+            f"{supabase_url('web_competidor')}"
             f"?empresa_id=eq.{empresa_id}"
             f"&select=id,presentation,gramaje,unidad,created_at"
             f"&order=presentation.asc",
-            headers=headers, timeout=10
+            headers=HEADERS, timeout=10
         )
         return jsonify({"products": res.json() if res.ok else []})
 
+    # POST — usa helper compartido
     if not request.is_json:
         return jsonify({"error": "Se esperaba JSON"}), 400
-
-    data         = request.json
-    empresa_id   = data.get("empresa_id")
-    presentation = data.get("presentation", "").strip().upper()
-
-    if not presentation:
-        return jsonify({"error": "El nombre del producto es requerido"}), 400
-    if not empresa_id:
-        return jsonify({"error": "empresa_id es requerido"}), 400
-
-    payload = {"presentation": presentation, "empresa_id": empresa_id}
-    if data.get("gramaje") is not None:
-        payload["gramaje"] = float(data["gramaje"])
-    if data.get("unidad"):
-        payload["unidad"] = data["unidad"]
-    if data.get("linea_id"):
-        payload["linea_id"] = data["linea_id"]
-
-    res = requests.post(
-        f"{SUPABASE_URL}/rest/v1/web_competidor",
-        headers=headers, json=payload, timeout=10
-    )
-    if res.status_code in (200, 201):
-        return jsonify({"success": True}), 201
-    return jsonify({"error": _supabase_error_msg(res)}), res.status_code
+    return _crear_producto("web_competidor", request.json)
 
 
 @app.route('/api/competitorproducts/<product_id>', methods=['PATCH', 'DELETE'])
 def update_delete_competitor(product_id):
-
-    if request.method == 'PATCH':
-        if not request.is_json:
-            return jsonify({"error": "Se esperaba JSON"}), 400
-        empresa_id = request.json.get('empresa_id')
-    else:
-        empresa_id = request.args.get('empresa_id')
-
+    empresa_id = request.json.get('empresa_id') if request.method == 'PATCH' and request.is_json else request.args.get('empresa_id')
     if not empresa_id:
         return jsonify({"error": "empresa_id es requerido"}), 400
-
-    check = requests.get(
-        f"{SUPABASE_URL}/rest/v1/web_competidor"
-        f"?id=eq.{product_id}&empresa_id=eq.{empresa_id}&select=id",
-        headers=headers, timeout=10
-    )
-    if not check.ok or not check.json():
-        return jsonify({"error": "Registro no encontrado o sin permiso"}), 404
-
-    op_url = f"{SUPABASE_URL}/rest/v1/web_competidor?id=eq.{product_id}&empresa_id=eq.{empresa_id}"
-
-    try:
-        if request.method == 'PATCH':
-            payload = {k: v for k, v in request.json.items() if k != 'empresa_id'}
-            if 'gramaje' in payload and payload['gramaje'] is not None:
-                payload['gramaje'] = float(payload['gramaje'])
-            res = requests.patch(op_url, headers=headers, json=payload, timeout=10)
-        else:
-            res = requests.delete(op_url, headers=headers, timeout=10)
-
-        if res.status_code in (200, 204):
-            return jsonify({"success": True}), (200 if request.method == 'PATCH' else 204)
-        return jsonify({"error": _supabase_error_msg(res)}), res.status_code
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    return _actualizar_o_eliminar("web_competidor", product_id, empresa_id,
+                                  request.method, request.json if request.method == 'PATCH' else None)
 
 
-# ─── API: My products ────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# API: MIS PRODUCTOS
+# ═══════════════════════════════════════════════════════════════════════════════
 @app.route('/api/myproducts', methods=['GET', 'POST'])
 def handle_my_products():
-
-    # GET — listar productos de la empresa (con linea join)
     if request.method == 'GET':
         empresa_id = request.args.get('empresa_id')
         if not empresa_id:
             return jsonify({"error": "empresa_id es requerido"}), 400
 
         res = requests.get(
-            f"{SUPABASE_URL}/rest/v1/web_myproductos"
+            f"{supabase_url('web_myproductos')}"
             f"?empresa_id=eq.{empresa_id}"
             f"&select=id,presentation,gramaje,unidad,linea_id,created_at,web_lineas(nombre)"
             f"&order=presentation.asc",
-            headers=headers, timeout=10
+            headers=HEADERS, timeout=10
         )
         return jsonify({"products": res.json() if res.ok else []})
 
-    # POST — crear producto
+    # POST — usa helper compartido
     if not request.is_json:
         return jsonify({"error": "Se esperaba JSON"}), 400
-
-    data         = request.json
-    empresa_id   = data.get("empresa_id")
-    presentation = data.get("presentation", "").strip().upper()
-
-    if not presentation:
-        return jsonify({"error": "El nombre del producto es requerido"}), 400
-    if not empresa_id:
-        return jsonify({"error": "empresa_id es requerido"}), 400
-
-    payload = {"presentation": presentation, "empresa_id": empresa_id}
-    if data.get("gramaje") is not None:
-        payload["gramaje"] = float(data["gramaje"])
-    if data.get("unidad"):
-        payload["unidad"] = data["unidad"]
-    if data.get("linea_id"):
-        payload["linea_id"] = data["linea_id"]
-
-    res = requests.post(
-        f"{SUPABASE_URL}/rest/v1/web_myproductos",
-        headers=headers, json=payload, timeout=10
-    )
-    if res.status_code in (200, 201):
-        return jsonify({"success": True}), 201
-    return jsonify({"error": _supabase_error_msg(res)}), res.status_code
+    return _crear_producto("web_myproductos", request.json)
 
 
 @app.route('/api/myproducts/<product_id>', methods=['PATCH', 'DELETE'])
 def update_delete_myproduct(product_id):
-
-    if request.method == 'PATCH':
-        if not request.is_json:
-            return jsonify({"error": "Se esperaba JSON"}), 400
-        empresa_id = request.json.get('empresa_id')
-    else:
-        empresa_id = request.args.get('empresa_id')
-
+    empresa_id = request.json.get('empresa_id') if request.method == 'PATCH' and request.is_json else request.args.get('empresa_id')
     if not empresa_id:
         return jsonify({"error": "empresa_id es requerido"}), 400
-
-    # Verificar propiedad
-    check = requests.get(
-        f"{SUPABASE_URL}/rest/v1/web_myproductos"
-        f"?id=eq.{product_id}&empresa_id=eq.{empresa_id}&select=id",
-        headers=headers, timeout=10
-    )
-    if not check.ok or not check.json():
-        return jsonify({"error": "Registro no encontrado o sin permiso"}), 404
-
-    op_url = f"{SUPABASE_URL}/rest/v1/web_myproductos?id=eq.{product_id}&empresa_id=eq.{empresa_id}"
-
-    try:
-        if request.method == 'PATCH':
-            payload = {k: v for k, v in request.json.items() if k != 'empresa_id'}
-            # Asegurar float en gramaje
-            if 'gramaje' in payload and payload['gramaje'] is not None:
-                payload['gramaje'] = float(payload['gramaje'])
-            res = requests.patch(op_url, headers=headers, json=payload, timeout=10)
-        else:
-            res = requests.delete(op_url, headers=headers, timeout=10)
-
-        if res.status_code in (200, 204):
-            return jsonify({"success": True}), (200 if request.method == 'PATCH' else 204)
-        return jsonify({"error": _supabase_error_msg(res)}), res.status_code
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    return _actualizar_o_eliminar("web_myproductos", product_id, empresa_id,
+                                  request.method, request.json if request.method == 'PATCH' else None)
 
 # ─── API: Planograma upload ───────────────────────────────────────────────────
 @app.route('/api/upload_planogram', methods=['POST'])
@@ -1088,7 +941,7 @@ def upload_planogram():
 
         update_resp = requests.patch(
             f"{SUPABASE_URL}/rest/v1/empresas?id=eq.{empresa_id}",
-            headers=headers,
+            headers=HEADERS,
             json={"planogram_image": file_name},
             timeout=10
         )
@@ -1115,7 +968,7 @@ def empresa_status():
 
     # Datos de la empresa
     url_e = f"{SUPABASE_URL}/rest/v1/empresas?id=eq.{empresa_id}&select=estatus,fecha_vencimiento,dias_gracia,nombre"
-    res_e = requests.get(url_e, headers=headers, timeout=5)
+    res_e = requests.get(url_e, headers=HEADERS, timeout=5)
     if not res_e.ok or not res_e.json():
         return jsonify({'error': 'Empresa no encontrada'}), 404
     empresa = res_e.json()[0]
@@ -1134,7 +987,7 @@ def empresa_status():
     url_p = (f"{SUPABASE_URL}/rest/v1/capta_pagos"
              f"?empresa_id=eq.{empresa_id}"
              f"&select=tipo,concepto,vencimiento,estado,monto")
-    res_p = requests.get(url_p, headers=headers, timeout=5)
+    res_p = requests.get(url_p, headers=HEADERS, timeout=5)
     pagos = res_p.json() if res_p.ok else []
 
     alertas_pagos = []
@@ -1186,7 +1039,7 @@ def handle_producto_competencia():
             f"?producto_id=eq.{producto_id}&empresa_id=eq.{empresa_id}"
             f"&select=id,competidor_id,web_competidor(id,presentation,gramaje,unidad)"
             f"&order=created_at.asc",
-            headers=headers, timeout=10
+            headers=HEADERS, timeout=10
         )
         return jsonify({"relaciones": res.json() if res.ok else []})
 
@@ -1204,14 +1057,14 @@ def handle_producto_competencia():
     # Verificar que producto pertenece a la empresa
     chk = requests.get(
         f"{SUPABASE_URL}/rest/v1/web_myproductos?id=eq.{producto_id}&empresa_id=eq.{empresa_id}&select=id",
-        headers=headers, timeout=10
+        headers=HEADERS, timeout=10
     )
     if not chk.ok or not chk.json():
         return jsonify({"error": "Producto no encontrado o sin permiso"}), 404
 
     res = requests.post(
         f"{SUPABASE_URL}/rest/v1/web_producto_competencia",
-        headers=headers,
+        headers=HEADERS,
         json={"empresa_id": empresa_id, "producto_id": producto_id, "competidor_id": competidor_id},
         timeout=10
     )
@@ -1236,7 +1089,7 @@ def delete_producto_competencia(relacion_id):
     res = requests.delete(
         f"{SUPABASE_URL}/rest/v1/web_producto_competencia"
         f"?id=eq.{relacion_id}&empresa_id=eq.{empresa_id}",
-        headers=headers, timeout=10
+        headers=HEADERS, timeout=10
     )
     if res.status_code in (200, 204):
         return jsonify({"success": True}), 204
