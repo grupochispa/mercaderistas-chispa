@@ -287,8 +287,10 @@
               <th class="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Estado/Zona</th>
               <th class="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Tipo</th>
               <th class="py-3 px-4 text-left text-xs font-bold text-indigo-500 uppercase tracking-wider">Nuestro producto</th>
+              <th class="py-3 px-4 text-center text-xs font-bold text-indigo-500 uppercase tracking-wider">Orig. nuestro</th>
               <th class="py-3 px-4 text-center text-xs font-bold text-indigo-500 uppercase tracking-wider">USD nuestro</th>
               <th class="py-3 px-4 text-left text-xs font-bold text-red-500 uppercase tracking-wider">Competidor</th>
+              <th class="py-3 px-4 text-center text-xs font-bold text-red-500 uppercase tracking-wider">Orig. comp.</th>
               <th class="py-3 px-4 text-center text-xs font-bold text-red-500 uppercase tracking-wider">USD comp.</th>
               <th class="py-3 px-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Δ%</th>
             </tr>
@@ -370,10 +372,10 @@ function obtenerTasa(fechaStr) {
   return sorted.find(t => new Date(t.fecha) <= new Date(fechaStr)) || sorted[0];
 }
 function normalizarMoneda(m) {
-  if (!m) return 'USD';
-  const raw = String(m).trim().toUpperCase();
-  const map = { BS:'Bs','B$':'Bs','BS.':'Bs',VES:'Bs',VEF:'Bs',COP:'COP',COL:'COP',USD:'USD','US$':'USD' };
-  return map[raw] || (/^COP$/i.test(raw)?'COP':/^BS/i.test(raw)?'Bs':/^USD$/i.test(raw)?'USD':raw);
+   if (!m) return 'USD';
+   const raw = String(m).trim().toUpperCase();
+   const map = { BS:'Bs','B$':'Bs','BS.':'Bs',VES:'Bs',VEF:'Bs',COP:'COP',COL:'COP',USD:'USD','US$':'USD','$':'COP' };
+   return map[raw] || (/^COP$/i.test(raw)?'COP':/^BS/i.test(raw)?'Bs':/^USD$/i.test(raw)?'USD':raw);
 }
 function parsePrecio(precio) {
   if (!precio && precio !== 0) return NaN;
@@ -389,31 +391,37 @@ function parsePrecio(precio) {
   return parseFloat(s);
 }
 function convertirAPrecioUSD(precio, moneda, fecha, estado) {
-  if (!precio && precio !== 0) return null;
+  // Retorna { usd: number | null, monedaFinal: string, tasaUsada: number | null, convertido: boolean }
+  if (!precio && precio !== 0) return { usd: null, monedaFinal: 'USD', tasaUsada: null, convertido: false };
   const n = parsePrecio(precio);
-  if (isNaN(n) || n <= 0) return null;
+  if (isNaN(n) || n <= 0) return { usd: null, monedaFinal: 'USD', tasaUsada: null, convertido: false };
   let mn = normalizarMoneda(moneda);
   const t = obtenerTasa(fecha);
   
   // Si la moneda no está especificada y el precio es alto, inferir automáticamente
   if (mn === 'USD' && !moneda) {
-    // Si hay tasa de COP disponible y el precio es muy alto (>500), asumir COP
     if (n > 500 && t && t.tasa_cop_usd) {
       const comoCOP = n / parseFloat(t.tasa_cop_usd);
-      if (comoCOP < 50) { // Si dividido en COP da un valor razonable (< $50 USD)
-        mn = 'COP';
-      } else if (t && t.tasa_bs_usd) {
+      if (comoCOP < 50) { mn = 'COP'; }
+      else if (t && t.tasa_bs_usd) {
         const comoBs = n / parseFloat(t.tasa_bs_usd);
-        if (comoBs < 200) mn = 'Bs'; // Si dividido en Bs da un valor razonable (< $200 USD)
+        if (comoBs < 200) mn = 'Bs';
       }
     }
   }
   
-  if (mn === 'USD') return n;
-  if (!t) return null;
-  if (mn === 'Bs') return n / parseFloat(t.tasa_bs_usd);
-  if (mn === 'COP') return n / parseFloat(t.tasa_cop_usd);
-  return n;
+  if (mn === 'USD') return { usd: n, monedaFinal: 'USD', tasaUsada: null, convertido: false };
+  if (!t) return { usd: null, monedaFinal: mn, tasaUsada: null, convertido: false, sinTasa: true };
+  
+  if (mn === 'Bs') {
+    const tasa = parseFloat(t.tasa_bs_usd);
+    return { usd: n / tasa, monedaFinal: 'Bs', tasaUsada: tasa, convertido: true };
+  }
+  if (mn === 'COP') {
+    const tasa = parseFloat(t.tasa_cop_usd);
+    return { usd: n / tasa, monedaFinal: 'COP', tasaUsada: tasa, convertido: true };
+  }
+  return { usd: n, monedaFinal: mn, tasaUsada: null, convertido: false };
 }
 
 // ── Competencia directa ───────────────────────────────────────────
@@ -517,8 +525,8 @@ async function fetchDataAnalisis() {
         const keyN = buildKey(m.presentation, m.gramaje, m.unidad);
         if (filtroProd && keyN !== filtroProd) return;
 
-        const nUSD = convertirAPrecioUSD(m.price, m.currency, row.created_at);
-        if (!nUSD) { sinCompAsignada.add(keyN); return; }
+        const nConv = convertirAPrecioUSD(m.price, m.currency, row.created_at);
+        if (!nConv || !nConv.usd) { sinCompAsignada.add(keyN); return; }
 
         const base = {
           fecha: row.created_at,
@@ -528,11 +536,17 @@ async function fetchDataAnalisis() {
           trade: row.trade || '—',
           p_mayorista: row.p_mayorista,
           nuestroProd: keyN,
-          nUSD,
+          nUSD: nConv.usd,
           nPrecioOrig: m.price,
-          nMoneda: m.currency,
+          nMonedaOrig: nConv.monedaFinal,
+          nConvertido: nConv.convertido,
+          nTasaUsada: nConv.tasaUsada,
           compProd: null,
           cUSD: null,
+          cPrecioOrig: null,
+          cMonedaOrig: null,
+          cConvertido: false,
+          cTasaUsada: null,
           diferencia: null
         };
 
@@ -543,10 +557,19 @@ async function fetchDataAnalisis() {
           competidoresVinculados.forEach(keyC => {
             const cItem = ciIdx[keyC];
             if (!cItem || cItem.sin_stock) return;
-            const cUSD = convertirAPrecioUSD(cItem.price, cItem.currency, row.created_at);
-            if (!cUSD) return;
-            const diferencia = ((nUSD - cUSD) / cUSD) * 100;
-            filasComparacion.push({ ...base, compProd: keyC, cUSD, cPrecioOrig: cItem.price, cMoneda: cItem.currency, diferencia });
+            const cConv = convertirAPrecioUSD(cItem.price, cItem.currency, row.created_at);
+            if (!cConv || !cConv.usd) return;
+            const diferencia = ((nConv.usd - cConv.usd) / cConv.usd) * 100;
+            filasComparacion.push({
+              ...base,
+              compProd: keyC,
+              cUSD: cConv.usd,
+              cPrecioOrig: cItem.price,
+              cMonedaOrig: cConv.monedaFinal,
+              cConvertido: cConv.convertido,
+              cTasaUsada: cConv.tasaUsada,
+              diferencia
+            });
           });
         } else {
           sinCompAsignada.add(keyN);
@@ -876,27 +899,42 @@ function filtrarTablaComercio(term) {
 }
 
 // ── Tabla detalle ──
+function formatOrig(precio, moneda, convertido, tasa) {
+  if (!precio && precio !== 0) return '<span class="text-gray-400">—</span>';
+  const mn = moneda || 'USD';
+  let icon = '';
+  if (convertido && tasa) {
+    icon = ` <i class="fas fa-arrow-right text-[10px] text-amber-500" title="Conv: 1 USD = ${tasa.toFixed(2)} ${mn}"></i>`;
+  }
+  const label = mn === 'Bs' ? 'Bs' : mn === 'COP' ? 'COP' : '$';
+  return `<span class="text-xs text-gray-500">${label} ${Number(precio).toLocaleString('es-CO')}${icon}</span>`;
+}
+
 function renderTablaDetalle() {
   const filas = analisisData.length > 0 ? analisisData : nuestrosPrecios;
   const tbody = $('tbodyAnalisis');
   $('analisisInfo').textContent = `${filas.length} registros`;
 
   if (!filas.length) {
-    tbody.innerHTML = `<tr><td colspan="9" class="text-center py-10 text-gray-400">Sin datos con los filtros actuales</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" class="text-center py-10 text-gray-400">Sin datos con los filtros actuales</td></tr>`;
     return;
   }
 
   tbody.innerHTML = filas.map(f => `
     <tr class="row-hover">
-      <td class="py-3 px-4">${new Date(f.fecha).toLocaleDateString('es-ES')}</td>
-      <td class="py-3 px-4">${f.trade}</td>
-      <td class="py-3 px-4">${f.state}${f.zone && f.zone !== '—' ? ' / '+f.zone : ''}</td>
-      <td class="py-3 px-4">${f.p_mayorista === 'Si' ? 'Mayorista' : 'Detal'}</td>
-      <td class="py-3 px-4">${f.nuestroProd}</td>
-      <td class="py-3 px-4 text-center font-bold text-indigo-600">$${f.nUSD.toFixed(2)}</td>
-      <td class="py-3 px-4">${f.compProd || '<span class="text-amber-600">Sin competidor</span>'}</td>
-      <td class="py-3 px-4 text-center ${f.cUSD ? 'text-red-500' : 'text-gray-400'}">${f.cUSD ? '$'+f.cUSD.toFixed(2) : '—'}</td>
-      <td class="py-3 px-4 text-center">${f.diferencia !== null ? f.diferencia.toFixed(1)+'%' : '—'}</td>
+      <td class="py-3 px-4 text-xs">${new Date(f.fecha).toLocaleDateString('es-ES')}</td>
+      <td class="py-3 px-4 text-xs">${f.trade}</td>
+      <td class="py-3 px-4 text-xs">${f.state}${f.zone && f.zone !== '—' ? ' / '+f.zone : ''}</td>
+      <td class="py-3 px-4 text-xs">${f.p_mayorista === 'Si' ? 'Mayorista' : 'Detal'}</td>
+      <td class="py-3 px-4 text-xs font-medium">${f.nuestroProd}</td>
+      <td class="py-3 px-4 text-center">${formatOrig(f.nPrecioOrig, f.nMonedaOrig, f.nConvertido, f.nTasaUsada)}</td>
+      <td class="py-3 px-4 text-center font-bold text-indigo-600 text-xs">$${f.nUSD.toFixed(2)}</td>
+      <td class="py-3 px-4 text-xs">${f.compProd || '<span class="text-amber-600 text-xs">Sin competidor</span>'}</td>
+      <td class="py-3 px-4 text-center">${f.cUSD ? formatOrig(f.cPrecioOrig, f.cMonedaOrig, f.cConvertido, f.cTasaUsada) : '<span class="text-gray-400 text-xs">—</span>'}</td>
+      <td class="py-3 px-4 text-center ${f.cUSD ? 'text-red-500' : 'text-gray-400'} font-bold text-xs">${f.cUSD ? '$'+f.cUSD.toFixed(2) : '—'}</td>
+      <td class="py-3 px-4 text-center text-xs font-semibold ${f.diferencia !== null ? (f.diferencia > 0 ? 'text-red-500' : f.diferencia < 0 ? 'text-green-500' : 'text-gray-400') : 'text-gray-400'}">
+        ${f.diferencia !== null ? (f.diferencia > 0 ? '+' : '') + f.diferencia.toFixed(1)+'%' : '—'}
+      </td>
     </tr>
   `).join('');
 }
