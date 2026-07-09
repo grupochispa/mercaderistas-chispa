@@ -374,13 +374,16 @@ function obtenerTasa(fechaStr) {
 function normalizarMoneda(m) {
    if (!m) return '';
    const raw = String(m).trim().toUpperCase();
-   // Mapa de equivalencias
-   const map = { BS:'Bs','B$':'Bs','BS.':'Bs',VES:'Bs',VEF:'Bs',COP:'COP',COL:'COP',PESOS:'?','BOLIVARES':'Bs','BOLIVAR':'Bs','PESO':'?' };
+   // Mapa de equivalencias directo
+   const map = {
+     BS:'Bs', 'B$':'Bs', 'BS.':'Bs', VES:'Bs', VEF:'Bs', BOLIVARES:'Bs', BOLIVAR:'Bs',
+     COP:'COP', COL:'COP', PESOS:'COP', PESO:'COP',
+     USD:'USD', 'US$':'USD', DOLLAR:'USD', DOLARES:'USD'
+   };
    if (map[raw]) return map[raw];
-   if (/^COP$/i.test(raw) || /^COL$/i.test(raw)) return 'COP';
+   if (/^COP$/i.test(raw) || /^COL$/i.test(raw) || /^PESO/i.test(raw)) return 'COP';
    if (/^BS/i.test(raw) || /^BOLIVAR/i.test(raw) || /^VES/i.test(raw) || /^VEF/i.test(raw)) return 'Bs';
-   if (/^PESO/i.test(raw)) return '?'; // ambiguo, necesita inferencia
-   if (/^USD$/i.test(raw) || /^US\$/i.test(raw) || /^DOLLAR/i.test(raw)) return 'USD';
+   if (/^USD$/i.test(raw) || /^US\$/i.test(raw) || /^DOLLAR/i.test(raw) || /^DOLAR/i.test(raw)) return 'USD';
    if (/^\$$/.test(raw)) return '?'; // $ solo = ambiguo
    return '?'; // desconocido, forzar inferencia
 }
