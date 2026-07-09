@@ -490,9 +490,20 @@ function toUSD(p,m,f){
   if(s.includes(',')&&s.includes('.')){const lc=s.lastIndexOf(','),ld=s.lastIndexOf('.');s=lc>ld?s.replace(/\./g,'').replace(',','.'):s.replace(/,/g,'');}
   else if(s.includes(','))s=s.split(',')[1]?.length<=2?s.replace(',','.'):s.replace(/,/g,'');
   const n=parseFloat(s)||0;
-  const mn=(m||'').toUpperCase();
+  let mn=(m||'').toUpperCase();
   const t=tasas.find(x=>new Date(x.fecha)<=new Date(f))||tasas[0];
-  if(!t) return 0; // No hay tasa → no se puede convertir
+  if(!t) return 0;
+  
+  // Detección automática: si no hay moneda y el precio es alto, inferir COP o Bs
+  if(!m && n > 500 && t){
+    const comoCOP = n / parseFloat(t.tasa_cop_usd);
+    if(comoCOP < 50) mn = 'COP';
+    else {
+      const comoBs = n / parseFloat(t.tasa_bs_usd);
+      if(comoBs < 200) mn = 'VES';
+    }
+  }
+  
   if(mn==='BS'||mn==='B$'||mn==='VES') return n/parseFloat(t.tasa_bs_usd);
   if(mn==='COP'||mn==='PESOS') return n/parseFloat(t.tasa_cop_usd);
   return n;
