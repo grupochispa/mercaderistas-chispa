@@ -699,16 +699,16 @@ function renderPrecios(){
   const tendUSD=[];
   filtData.forEach(r=>{
     parseJ(r.myitems).forEach(i=>{
-      if(!i.price||!i.currency||i.presentation==='SIN STOCK')return;
+      if(!i.price||i.presentation==='SIN STOCK')return;
       const u=toUSD(i.price,i.currency,r.created_at);
       if(!prodUSD[i.presentation])prodUSD[i.presentation]=[];
       prodUSD[i.presentation].push(u);
-      const mn=(i.currency||'').toUpperCase();
+      const mn=(i.currency||'').toUpperCase()||'S/M';
       monedaCount[mn]=(monedaCount[mn]||0)+1;
       tendUSD.push({date:r.created_at,usd:u});
     });
     parseJ(r.competitoritems).forEach(i=>{
-      if(!i.price||!i.currency||i.sin_stock)return;
+      if(!i.price||i.sin_stock)return;
       const u=toUSD(i.price,i.currency,r.created_at);
       if(!compUSD[i.presentation])compUSD[i.presentation]=[];
       compUSD[i.presentation].push(u);
