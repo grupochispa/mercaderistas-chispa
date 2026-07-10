@@ -36,6 +36,8 @@
         <div><label class="sp-label">Propietario</label><input type="text" id="owner_full_name" class="sp-input"></div>
         <div><label class="sp-label">Ruta</label><input type="text" id="route_name" class="sp-input"></div>
         <div><label class="sp-label">Vendedor</label><input type="text" id="seller_name" class="sp-input"></div>
+        <div><label class="sp-label">Estado *</label><select id="estado_id" class="sp-select" required onchange="loadZonas(this.value,'zona_id')"><option value="">Seleccione…</option></select></div>
+        <div><label class="sp-label">Zona *</label><select id="zona_id" class="sp-select" disabled required><option value="">Seleccione…</option></select></div>
         <div><label class="sp-label">Latitud</label><input type="number" id="latitude" class="sp-input" placeholder="Ej: 10.48801" step="any"></div>
         <div><label class="sp-label">Longitud</label><input type="number" id="longitude" class="sp-input" placeholder="Ej: -66.87919" step="any"></div>
       </div>
@@ -91,6 +93,8 @@
           <div><label class="sp-label">Propietario</label><input type="text" id="edit_owner_full_name" class="sp-input"></div>
           <div><label class="sp-label">Ruta</label><input type="text" id="edit_route_name" class="sp-input"></div>
           <div><label class="sp-label">Vendedor</label><input type="text" id="edit_seller_name" class="sp-input"></div>
+          <div><label class="sp-label">Estado *</label><select id="edit_estado_id" class="sp-select" required onchange="loadZonas(this.value,'edit_zona_id')"><option value="">Seleccione…</option></select></div>
+          <div><label class="sp-label">Zona *</label><select id="edit_zona_id" class="sp-select" disabled required><option value="">Seleccione…</option></select></div>
           <div><label class="sp-label">Latitud</label><input type="number" id="edit_latitude" class="sp-input" placeholder="Ej: 10.48801" step="any"></div>
           <div><label class="sp-label">Longitud</label><input type="number" id="edit_longitude" class="sp-input" placeholder="Ej: -66.87919" step="any"></div>
         </div>
@@ -151,14 +155,31 @@ if(!empresaId){window.location.replace('/');throw new Error('no session');}
 
 let currentPage=1;const clientsPerPage=10;let searchTerm='',totalCount=0;
 let allLineas=[],allProductos=[],pm_cliente_id=null,pm_cliente_name='',pm_search_timer=null,pm_productos_filtrados=[];
+let allEstados=[],allZonas=[];
 
-waitDb(async()=>{await Promise.all([loadLineas(),loadAllProductos()]);loadClients(1,'');});
+waitDb(async()=>{await Promise.all([loadLineas(),loadAllProductos(),loadEstados()]);loadClients(1,'');});
+
+async function loadEstados(){
+  const{data}=await db.from('web_estados').select('*').order('nombre');
+  allEstados=data||[];
+  const selAdd=document.getElementById('estado_id');
+  selAdd.innerHTML='<option value="">Seleccione un estado</option>';
+  allEstados.forEach(e=>selAdd.innerHTML+=`<option value="${e.id}">${e.nombre}</option>`);
+}
+
+async function loadZonas(estadoId,sid){
+  const sel=document.getElementById(sid);sel.innerHTML='<option value="">Seleccione una zona</option>';sel.disabled=!estadoId;
+  if(!estadoId)return;
+  const{data}=await db.from('web_zonas').select('*').eq('estado_id',estadoId).order('nombre');
+  allZonas=data||[];sel.disabled=false;
+  allZonas.forEach(z=>sel.innerHTML+=`<option value="${z.id}">${z.nombre}</option>`);
+}
 
 async function loadLineas(){const{data}=await db.from('web_lineas').select('id,nombre').eq('empresa_id',empresaId).eq('activa',true).order('nombre');allLineas=data||[];}
 async function loadAllProductos(){const{data}=await db.from('web_myproductos').select('id,presentation,linea_id,web_lineas(nombre)').eq('empresa_id',empresaId).order('presentation');allProductos=data||[];}
 
 async function loadClients(page,term){
-  let q=db.from('web_clientes').select('*',{count:'exact'}).eq('empresa_id',empresaId);
+  let q=db.from('web_clientes').select('*,web_estados!web_clientes_estado_id_fkey(nombre),web_zonas!web_clientes_zona_id_fkey(nombre)',{count:'exact'}).eq('empresa_id',empresaId);
   if(term)q=q.or(`trade_name.ilike.%${term}%,code.ilike.%${term}%,city.ilike.%${term}%,phone.ilike.%${term}%`);
   q=q.order('trade_name').range((page-1)*clientsPerPage,(page*clientsPerPage)-1);
   const{data,count,error}=await q;
@@ -179,11 +200,14 @@ function renderClients(data){
   ul.innerHTML='';no.classList.add('hidden');
   if(!data.length){no.classList.remove('hidden');return;}
   data.forEach(c=>{
+    const estadoNombre=c.web_estados?.nombre||'—';
+    const zonaNombre=c.web_zonas?.nombre||'—';
     const li=document.createElement('li');
     li.style='padding:14px;border:1px solid var(--brd);border-radius:var(--r2);background:var(--inp);display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px';
     li.innerHTML=`<div>
       <strong style="color:var(--accent);font-size:.95rem">${c.trade_name}</strong>
       <p style="font-size:.75rem;color:var(--muted);margin-top:2px">${[c.city,c.code,c.phone].filter(Boolean).join(' · ')}</p>
+      <p style="font-size:.7rem;color:var(--muted);margin-top:1px">${estadoNombre} / ${zonaNombre}</p>
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap">
       <button onclick="viewDetails('${c.id}')" class="sp-btn sp-btn-sec sp-btn-sm"><i class="fas fa-eye"></i></button>
@@ -195,26 +219,32 @@ function renderClients(data){
   });
 }
 
-// ── AGREGAR CLIENTE CON VALIDACIÓN DE DUPLICADO ──
+// ── AGREGAR CLIENTE CON VALIDACIÓN CASE-INSENSITIVE ──
 document.getElementById('clientForm').addEventListener('submit',async e=>{
   e.preventDefault();
   const tradeName=document.getElementById('trade_name').value.trim().toUpperCase();
+  const estadoId=document.getElementById('estado_id').value;
+  const zonaId=document.getElementById('zona_id').value;
   if(!tradeName){captaToast('El nombre comercial es obligatorio','error');return;}
+  if(!estadoId){captaToast('Selecciona un estado','error');return;}
+  if(!zonaId){captaToast('Selecciona una zona','error');return;}
   
-  // Validar duplicado por nombre comercial
-  const{data:dup}=await db.from('web_clientes').select('id').eq('empresa_id',empresaId).eq('trade_name',tradeName).maybeSingle();
+  // Validar duplicado case-insensitive por nombre comercial
+  const{data:dup}=await db.from('web_clientes').select('id').eq('empresa_id',empresaId).ilike('trade_name',tradeName).maybeSingle();
   if(dup){captaToast(`Ya existe un cliente con el nombre "${tradeName}"`,'warn');return;}
   
-  const payload={empresa_id:empresaId,trade_name:tradeName,address:document.getElementById('address').value.trim()||null,city:document.getElementById('city').value.trim()||null,phone:document.getElementById('phone').value.trim()||null,code:document.getElementById('code').value.trim()||null,owner_full_name:document.getElementById('owner_full_name').value.trim()||null,route_name:document.getElementById('route_name').value.trim()||null,seller_name:document.getElementById('seller_name').value.trim()||null,latitude:parseFloat(document.getElementById('latitude').value)||null,longitude:parseFloat(document.getElementById('longitude').value)||null};
+  const payload={empresa_id:empresaId,trade_name:tradeName,address:document.getElementById('address').value.trim()||null,city:document.getElementById('city').value.trim()||null,phone:document.getElementById('phone').value.trim()||null,code:document.getElementById('code').value.trim()||null,owner_full_name:document.getElementById('owner_full_name').value.trim()||null,route_name:document.getElementById('route_name').value.trim()||null,seller_name:document.getElementById('seller_name').value.trim()||null,estado_id:estadoId,zona_id:zonaId,latitude:parseFloat(document.getElementById('latitude').value)||null,longitude:parseFloat(document.getElementById('longitude').value)||null};
   const{error}=await db.from('web_clientes').insert([payload]);
   if(error){captaToast('Error: '+error.message,'error');return;}
-  captaToast('Cliente agregado','success');document.getElementById('clientForm').reset();loadClients(currentPage,searchTerm);
+  captaToast('Cliente agregado','success');document.getElementById('clientForm').reset();
+  document.getElementById('zona_id').disabled=true;document.getElementById('zona_id').innerHTML='<option value="">Seleccione…</option>';
+  loadClients(currentPage,searchTerm);
 });
 
 async function viewDetails(id){
-  const{data:c}=await db.from('web_clientes').select('*').eq('id',id).single();
+  const{data:c}=await db.from('web_clientes').select('*,web_estados!web_clientes_estado_id_fkey(nombre),web_zonas!web_clientes_zona_id_fkey(nombre)').eq('id',id).single();
   if(!c)return;
-  const fields=[['Nombre',c.trade_name],['Dirección',c.address],['Ciudad',c.city],['Teléfono',c.phone],['Código',c.code],['Propietario',c.owner_full_name],['Ruta',c.route_name],['Vendedor',c.seller_name]];
+  const fields=[['Nombre',c.trade_name],['Dirección',c.address],['Ciudad',c.city],['Teléfono',c.phone],['Código',c.code],['Propietario',c.owner_full_name],['Ruta',c.route_name],['Vendedor',c.seller_name],['Estado',c.web_estados?.nombre||'—'],['Zona',c.web_zonas?.nombre||'—']];
   document.getElementById('modalBody').innerHTML=fields.filter(([,v])=>v).map(([l,v])=>`<div style="display:flex;gap:8px;padding:8px 0;border-bottom:1px solid var(--brd)"><span style="font-size:.72rem;font-weight:700;color:var(--muted);text-transform:uppercase;width:90px;flex-shrink:0">${l}</span><span style="font-size:.83rem">${v}</span></div>`).join('');
   document.getElementById('detailsModal').classList.add('open');
 }
@@ -226,20 +256,37 @@ async function openEditModal(id){
   ['trade_name','address','city','phone','code','owner_full_name','route_name','seller_name'].forEach(f=>{const el=document.getElementById('edit_'+f);if(el)el.value=c[f]||'';});
   document.getElementById('edit_latitude').value=c.latitude||'';
   document.getElementById('edit_longitude').value=c.longitude||'';
+  // Cargar estados para el edit modal
+  const {data:estados}=await db.from('web_estados').select('*').order('nombre');
+  const selE=document.getElementById('edit_estado_id');selE.innerHTML='<option value="">Seleccione un estado</option>';
+  (estados||[]).forEach(e=>selE.innerHTML+=`<option value="${e.id}">${e.nombre}</option>`);
+  selE.value=c.estado_id||'';
+  // Cargar zonas del estado
+  if(c.estado_id){
+    await loadZonas(c.estado_id,'edit_zona_id');
+    document.getElementById('edit_zona_id').value=c.zona_id||'';
+  }else{
+    document.getElementById('edit_zona_id').disabled=true;
+    document.getElementById('edit_zona_id').innerHTML='<option value="">Seleccione…</option>';
+  }
   document.getElementById('editModal').classList.add('open');
 }
 
-// ── EDITAR CLIENTE CON VALIDACIÓN DE DUPLICADO ──
+// ── EDITAR CLIENTE CON VALIDACIÓN CASE-INSENSITIVE ──
 async function saveEdit(){
   const id=document.getElementById('edit_id').value;
   const tradeName=document.getElementById('edit_trade_name').value.trim().toUpperCase();
+  const estadoId=document.getElementById('edit_estado_id').value;
+  const zonaId=document.getElementById('edit_zona_id').value;
   if(!tradeName){captaToast('El nombre comercial es obligatorio','error');return;}
+  if(!estadoId){captaToast('Selecciona un estado','error');return;}
+  if(!zonaId){captaToast('Selecciona una zona','error');return;}
   
-  // Validar duplicado excluyendo el registro actual
-  const{data:dup}=await db.from('web_clientes').select('id').eq('empresa_id',empresaId).eq('trade_name',tradeName).neq('id',id).maybeSingle();
+  // Validar duplicado case-insensitive excluyendo el registro actual
+  const{data:dup}=await db.from('web_clientes').select('id').eq('empresa_id',empresaId).ilike('trade_name',tradeName).neq('id',id).maybeSingle();
   if(dup){captaToast(`Ya existe otro cliente con el nombre "${tradeName}"`,'warn');return;}
   
-  const payload={trade_name:tradeName,address:document.getElementById('edit_address').value.trim()||null,city:document.getElementById('edit_city').value.trim()||null,phone:document.getElementById('edit_phone').value.trim()||null,code:document.getElementById('edit_code').value.trim()||null,owner_full_name:document.getElementById('edit_owner_full_name').value.trim()||null,route_name:document.getElementById('edit_route_name').value.trim()||null,seller_name:document.getElementById('edit_seller_name').value.trim()||null,latitude:parseFloat(document.getElementById('edit_latitude').value)||null,longitude:parseFloat(document.getElementById('edit_longitude').value)||null};
+  const payload={trade_name:tradeName,address:document.getElementById('edit_address').value.trim()||null,city:document.getElementById('edit_city').value.trim()||null,phone:document.getElementById('edit_phone').value.trim()||null,code:document.getElementById('edit_code').value.trim()||null,owner_full_name:document.getElementById('edit_owner_full_name').value.trim()||null,route_name:document.getElementById('edit_route_name').value.trim()||null,seller_name:document.getElementById('edit_seller_name').value.trim()||null,estado_id:estadoId,zona_id:zonaId,latitude:parseFloat(document.getElementById('edit_latitude').value)||null,longitude:parseFloat(document.getElementById('edit_longitude').value)||null};
   const{error}=await db.from('web_clientes').update(payload).eq('id',id).eq('empresa_id',empresaId);
   if(error){captaToast('Error: '+error.message,'error');return;}
   captaToast('Actualizado','success');closeModal('editModal');loadClients(currentPage,searchTerm);
