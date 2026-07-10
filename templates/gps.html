@@ -188,8 +188,10 @@
       <div class="mb-4">
         <h3 class="text-sm font-bold text-gray-700 dark:text-white mb-1">Análisis de tiempos por establecimiento</h3>
         <p class="text-xs text-gray-400">
-          <span class="text-amber-500 font-semibold">Tiempo en local</span> = tiempo total entre visitas menos el viaje estimado ·
-          <span class="text-blue-500 font-semibold">Viaje prom.</span> = estimado según distancia GPS (pie &lt;500m · ciudad &lt;20km · carretera ≥20km)
+          <span class="text-amber-500 font-semibold">Tiempo en local</span> = tiempo real descontando viaje, pausas y no contabilizado ·
+          <span class="text-blue-500 font-semibold">Viaje prom.</span> = estimado según distancia GPS (pie <500m · ciudad <20km · carretera ≥20km) ·
+          <span class="text-red-500 font-semibold">Pausas</span> = gaps >45 min entre 11am-2pm detectados como almuerzo ·
+          <span class="text-gray-500 font-semibold">Última visita</span> = estimada según promedio del promotor
         </p>
       </div>
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
@@ -411,6 +413,21 @@ function estimarTiempoViaje(distMetros) {
   return (km / vel) * 60;
 }
 
+// ── Detectar gaps de pausa/almuerzo (>45 min sin visitas) ──────────
+function esPausa(createdAt, nextCreatedAt) {
+  const gapMin = (new Date(nextCreatedAt) - new Date(createdAt)) / 60000;
+  if (gapMin < 45) return false;
+  const hora = new Date(createdAt).getHours();
+  // Si está entre 11am y 2pm es probable almuerzo
+  return (hora >= 10 && hora <= 14);
+}
+
+function minPausa(createdAt, nextCreatedAt) {
+  const gapMin = (new Date(nextCreatedAt) - new Date(createdAt)) / 60000;
+  if (gapMin > 45) return Math.round(gapMin); // todo el gap es pausa
+  return 0;
+}
+
 // ── Procesar: calcular tiempos reales por promotor/día ────────────
 function procesarRegistros() {
   const byProm = {};
@@ -422,25 +439,81 @@ function procesarRegistros() {
 
   processed = allRecords.map(r => ({
     ...r,
-    tiempoEstablecimiento: null,  // tiempo REAL en el local (descontando viaje)
+    tiempoEstablecimiento: null,  // tiempo REAL en el local (descontando viaje y pausas)
     tiempoViaje:           null,  // tiempo estimado de desplazamiento al siguiente
     distanciaAlSiguiente:  null,  // metros entre visitas consecutivas
+    minutosPausaAntes:     0,     // minutos de pausa/almuerzo ANTES de esta visita
+    minutosPausaDespues:   0,     // minutos de pausa DESPUÉS de esta visita (hacia la siguiente)
+    tiempoNoContabilizado: null,  // tiempo entre visitas que no es ni local ni viaje
+    esUltimaVisita:        false,
+    esPrimeraVisita:       false,
     esSospechosa:          false,
+    jornadaInicio:         null,  // timestamp primera visita del día
+    jornadaFin:            null,  // timestamp última visita del día
   }));
 
   Object.entries(byProm).forEach(([, recs]) => {
     const sorted = [...recs].sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
+    const totalVisitas = sorted.length;
 
     sorted.forEach((r, idx) => {
       const procR = processed.find(p => p.id === r.id);
       if (!procR) return;
 
-      if (idx < sorted.length - 1) {
+      const isFirst = idx === 0;
+      const isLast  = idx === totalVisitas - 1;
+
+      procR.esPrimeraVisita = isFirst;
+      procR.esUltimaVisita  = isLast;
+
+      // Marcar inicio y fin de jornada en cada registro
+      procR.jornadaInicio = sorted[0].created_at;
+      procR.jornadaFin    = sorted[totalVisitas - 1].created_at;
+
+      if (isLast) {
+        // ── ÚLTIMA VISITA del día ──────────────────────────────────
+        // No tenemos "siguiente visita" para calcular.
+        // Calculamos un tiempo estimado usando el promedio del promotor
+        // o asumimos 15 min si no hay datos suficientes
+        
+        // Obtener tiempos de visitas anteriores de este promotor
+        const tiemposPrevios = sorted
+          .slice(0, -1)  // todas menos la última
+          .map(prev => {
+            const p = processed.find(p2 => p2.id === prev.id);
+            return p ? p.tiempoEstablecimiento : 0;
+          })
+          .filter(t => t !== null && t > 0);
+        
+        let estimado = 15; // 15 min por defecto para la última
+        if (tiemposPrevios.length >= 2) {
+          // Usar el promedio del promotor, sin contar valores extremos
+          const sortedT = [...tiemposPrevios].sort((a,b) => a-b);
+          const mid = sortedT.slice(Math.floor(sortedT.length*0.25), Math.ceil(sortedT.length*0.75));
+          estimado = mid.length ? Math.round(mid.reduce((a,b)=>a+b,0)/mid.length) : Math.round(tiemposPrevios.reduce((a,b)=>a+b,0)/tiemposPrevios.length);
+        } else if (tiemposPrevios.length === 1) {
+          estimado = Math.round(tiemposPrevios[0]);
+        }
+        
+        // No exceder 120 min ni ser menor a 3 min
+        estimado = Math.max(3, Math.min(120, estimado));
+        
+        procR.tiempoEstablecimiento = estimado;
+        procR.tiempoViaje = 0;
+        procR.distanciaAlSiguiente = null;
+
+      } else {
+        // ── VISITA INTERMEDIA (no es la última) ─────────────────────
         const next     = sorted[idx + 1];
         const procNext = processed.find(p => p.id === next.id);
 
         // Tiempo total entre inicio de esta visita e inicio de la siguiente
         const totalMin = (new Date(next.created_at) - new Date(r.created_at)) / 60000;
+
+        // Detectar si hay pausa/almuerzo entre estas visitas
+        const pausaMin = esPausa(r.created_at, next.created_at) 
+          ? Math.round((new Date(next.created_at) - new Date(r.created_at)) / 60000)
+          : 0;
 
         // Calcular distancia y tiempo de viaje estimado
         let distMetros = null;
@@ -455,11 +528,38 @@ function procesarRegistros() {
           viajeMin = estimarTiempoViaje(distMetros);
         }
 
-        // Tiempo real en el establecimiento = total − viaje estimado
-        const tiempoRealMin = Math.max(0, totalMin - viajeMin);
+        // ── Desglose del tiempo entre visitas ──────────────────
+        // tiempo_total = tiempo_en_local + tiempo_viaje + pausa + no_contabilizado
+        let tiempoRealMin = 0;
+        let noContab = 0;
 
-        procR.tiempoEstablecimiento = tiempoRealMin;
-        procR.tiempoViaje           = viajeMin;
+        if (pausaMin > 0) {
+          // Hay pausa (almuerzo): tiempo_en_local es solo hasta que empezó la pausa
+          // Asumimos que la pausa ocurre DESPUÉS del viaje
+          // Ej: Visita A (10:00) → viaje (10min) → pausa (60min) → Visita B (11:10)
+          // tiempo_en_local_A = 10:10 - 10:00 - viaje(10min) = 0? No, asumimos visita corta
+          // Mejor: si hay pausa, el tiempo_en_local es lo que queda después de viaje, mínimo 3 min
+          const restanteSinViaje = totalMin - viajeMin - pausaMin;
+          tiempoRealMin = Math.max(3, restanteSinViaje);
+          noContab = pausaMin;
+          procR.minutosPausaDespues = pausaMin;
+          if (procNext) procNext.minutosPausaAntes = pausaMin;
+        } else {
+          // Sin pausa detectable
+          tiempoRealMin = Math.max(0, totalMin - viajeMin);
+
+          // Si el tiempo en local es excesivo (>120 min) sin pausa,
+          // probablemente hay tiempo no contabilizado (espera, trámites, etc.)
+          if (tiempoRealMin > 120) {
+            const exceso = tiempoRealMin - 120;
+            tiempoRealMin = 120;
+            noContab = exceso;
+          }
+        }
+
+        procR.tiempoEstablecimiento  = tiempoRealMin;
+        procR.tiempoViaje            = viajeMin;
+        procR.tiempoNoContabilizado  = noContab > 0 ? noContab : null;
 
         // Sospechosa: tiempo real en local < 3 min tras descontar viaje
         if (tiempoRealMin < 3) {
@@ -587,6 +687,17 @@ function renderRuta() {
     ? conViaje.reduce((s,r) => s + r.tiempoViaje, 0) / conViaje.length : null;
   const sosp       = recs.filter(r => r.esSospechosa).length;
   const conf       = recs.filter(isConfirmado).length;
+  
+  // Calcular total de pausas y tiempo no contabilizado
+  const totalPausa    = recs.reduce((s,r) => s + (r.minutosPausaDespues || 0), 0);
+  const totalNoContab = recs.reduce((s,r) => s + (r.tiempoNoContabilizado || 0), 0);
+  const totalLocal    = recs.reduce((s,r) => s + (r.tiempoEstablecimiento || 0), 0);
+  const totalViaje    = recs.reduce((s,r) => s + (r.tiempoViaje || 0), 0);
+  
+  // Tiempo productivo: local + viaje
+  const productivoMin = Math.min(totalLocal + totalViaje, jornadaMin);
+  // Tiempo no productivo: pausas + no contabilizado
+  const noProductivoMin = totalPausa + totalNoContab;
 
   const resumenEl = document.getElementById('resumenDia');
   resumenEl.classList.remove('hidden');
@@ -596,15 +707,41 @@ function renderRuta() {
     { lbl:'Fin jornada',         val: fmtHora(fin.created_at),                      color:'text-indigo-600' },
     { lbl:'Duración total',      val: fmtMin(jornadaMin),                            color:'text-green-600' },
     { lbl:'Visitas',             val: `${recs.length} · ${conf} conf.`,              color:'text-gray-700 dark:text-gray-200' },
-    { lbl:'⏱ Tiempo en local',  val: avgTiempo ? fmtMin(avgTiempo) : '—',           color:'text-amber-600' },
-    { lbl:'🚗 Viaje prom.',      val: avgViaje  ? fmtMin(avgViaje)  : '—',           color:'text-blue-500' },
-    { lbl:'Sospechosas',         val: sosp, color: sosp > 0 ? 'text-red-600' : 'text-green-600' },
-    { lbl:'Primera visita',      val: recs[0].trade || '—',                          color:'text-gray-600 dark:text-gray-300' },
+    { lbl:'⏱ En local total',   val: fmtMin(totalLocal),                             color:'text-amber-600' },
+    { lbl:'🚗 Viaje total',      val: fmtMin(totalViaje),                             color:'text-blue-500' },
+    { lbl:'☕ Pausa total',      val: totalPausa > 0 ? fmtMin(totalPausa) : '—',    color:'text-red-500' },
+    { lbl:'⏳ No contab.',       val: totalNoContab > 0 ? fmtMin(totalNoContab) : '—', color:'text-gray-400' },
   ].map(k => `
     <div class="bg-gray-50 dark:bg-slate-700 rounded-xl p-3 border border-gray-100 dark:border-slate-600">
       <p class="text-xs text-gray-400 uppercase tracking-wide mb-1">${k.lbl}</p>
       <p class="text-sm font-bold ${k.color} truncate">${k.val}</p>
     </div>`).join('');
+
+  // ── Barra de tiempo productivo ─────────────────────────────────────
+  const pctLocal   = jornadaMin > 0 ? Math.round(totalLocal / jornadaMin * 100) : 0;
+  const pctViaje   = jornadaMin > 0 ? Math.round(totalViaje / jornadaMin * 100) : 0;
+  const pctPausa   = jornadaMin > 0 ? Math.round(totalPausa / jornadaMin * 100) : 0;
+  const pctNoContab = jornadaMin > 0 ? Math.round(totalNoContab / jornadaMin * 100) : 0;
+  const pctNoReg   = Math.max(0, 100 - pctLocal - pctViaje - pctPausa - pctNoContab);
+
+  resumenEl.innerHTML += `
+    <div class="col-span-full bg-gray-50 dark:bg-slate-700 rounded-xl p-3 border border-gray-100 dark:border-slate-600">
+      <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Distribución de la jornada (${fmtMin(jornadaMin)})</p>
+      <div class="w-full h-5 rounded-full overflow-hidden flex text-xs text-white font-bold" style="min-height:20px">
+        ${pctLocal > 0 ? `<div style="width:${pctLocal}%;background:#D97706;display:flex;align-items:center;justify-content:center;transition:width .3s" title="En local: ${fmtMin(totalLocal)}">${pctLocal >= 12 ? `🏪${pctLocal}%` : ''}</div>` : ''}
+        ${pctViaje > 0 ? `<div style="width:${pctViaje}%;background:#3B82F6;display:flex;align-items:center;justify-content:center;transition:width .3s" title="Viaje: ${fmtMin(totalViaje)}">${pctViaje >= 12 ? `🚗${pctViaje}%` : ''}</div>` : ''}
+        ${pctPausa > 0 ? `<div style="width:${pctPausa}%;background:#EF4444;display:flex;align-items:center;justify-content:center;transition:width .3s" title="Pausa/almuerzo: ${fmtMin(totalPausa)}">${pctPausa >= 12 ? `☕${pctPausa}%` : ''}</div>` : ''}
+        ${pctNoContab > 0 ? `<div style="width:${pctNoContab}%;background:#9CA3AF;display:flex;align-items:center;justify-content:center;transition:width .3s" title="No contabilizado: ${fmtMin(totalNoContab)}">${pctNoContab >= 12 ? `⏳${pctNoContab}%` : ''}</div>` : ''}
+        ${pctNoReg > 0 ? `<div style="width:${pctNoReg}%;background:#E5E7EB;display:flex;align-items:center;justify-content:center;transition:width .3s" title="Sin registro: ${fmtMin(jornadaMin - totalLocal - totalViaje - totalPausa - totalNoContab)}">${pctNoReg >= 12 ? `—${pctNoReg}%` : ''}</div>` : ''}
+      </div>
+      <div class="flex flex-wrap gap-3 mt-2 text-xs text-gray-400">
+        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-amber-500 inline-block"></span>En local ${pctLocal}%</span>
+        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-blue-500 inline-block"></span>Viaje ${pctViaje}%</span>
+        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-red-500 inline-block"></span>Pausa ${pctPausa}%</span>
+        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-gray-400 inline-block"></span>No contab. ${pctNoContab}%</span>
+        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-gray-200 inline-block"></span>Resto ${pctNoReg}%</span>
+      </div>
+    </div>`;
 
   // ── Mapa de ruta ──────────────────────────────────────────────────
   if (!mapRuta) {
@@ -661,50 +798,100 @@ function renderRuta() {
   // ── Timeline ──────────────────────────────────────────────────────
   const timelineEl = document.getElementById('timeline');
   timelineEl.innerHTML = recs.map((r, idx) => {
+    const isFirst  = idx === 0;
     const isLast   = idx === recs.length - 1;
     const dotColor = r.esSospechosa ? '#8B5CF6' : isConfirmado(r) ? '#10B981' : '#EF4444';
 
-    const tiempoTxt = !isLast && r.tiempoEstablecimiento != null
-      ? `<div class="mt-2 space-y-1">
-           <div class="flex items-center gap-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
-             <i class="fas fa-clock text-xs"></i> ${fmtMin(r.tiempoEstablecimiento)} en establecimiento
-           </div>
-           ${r.tiempoViaje > 0
-             ? `<div class="flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500">
-                  <i class="fas fa-car text-xs"></i> ${fmtMin(r.tiempoViaje)} estimado de viaje al siguiente
-                </div>`
-             : ''}
+    // ── Tiempo en local (todos los registros ahora tienen tiempoEstablecimiento) ──
+    const enLocalTxt = r.tiempoEstablecimiento != null
+      ? `<div class="flex items-center gap-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+           <i class="fas fa-clock text-xs"></i> ${fmtMin(r.tiempoEstablecimiento)} en establecimiento
+           ${isLast ? `<span class="text-gray-400 font-normal ml-1">(estimado)</span>` : ''}
          </div>`
       : '';
 
-    const desplazTxt = !isLast && r.distanciaAlSiguiente != null
-      ? `<div class="ml-4 my-1 flex items-center gap-2 text-xs text-gray-400">
-          <i class="fas fa-arrow-down text-xs"></i>
-          ${r.distanciaAlSiguiente >= 1000
-            ? `${(r.distanciaAlSiguiente/1000).toFixed(1)} km hasta siguiente`
-            : `${r.distanciaAlSiguiente} m hasta siguiente`}
-        </div>`
+    // ── Tiempo de viaje al siguiente ──
+    const viajeTxt = !isLast && r.tiempoViaje > 0
+      ? `<div class="flex items-center gap-1.5 text-xs text-blue-400 dark:text-blue-400">
+           <i class="fas fa-car text-xs"></i> ${fmtMin(r.tiempoViaje)} de viaje
+         </div>`
       : '';
 
+    // ── Distancia al siguiente ──
+    const distTxt = !isLast && r.distanciaAlSiguiente != null
+      ? `<div class="flex items-center gap-1.5 text-xs text-gray-400">
+           <i class="fas fa-route text-xs"></i>
+           ${r.distanciaAlSiguiente >= 1000
+             ? `${(r.distanciaAlSiguiente/1000).toFixed(1)} km`
+             : `${r.distanciaAlSiguiente} m`}
+         </div>`
+      : '';
+
+    // ── Pausa/almuerzo DESPUÉS de esta visita ──
+    const pausaDespuesTxt = r.minutosPausaDespues > 0
+      ? `<div class="flex items-center gap-1.5 text-xs font-semibold text-red-500">
+           <i class="fas fa-coffee text-xs"></i> ☕ Pausa/almuerzo: ${fmtMin(r.minutosPausaDespues)}
+         </div>`
+      : '';
+
+    // ── Tiempo no contabilizado ──
+    const noContabTxt = r.tiempoNoContabilizado != null
+      ? `<div class="flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500">
+           <i class="fas fa-hourglass text-xs"></i> ⏳ ${fmtMin(r.tiempoNoContabilizado)} no contabilizado
+         </div>`
+      : '';
+
+    // ── Alerta sospechosa ──
     const alertaTxt = r.esSospechosa
-      ? `<div class="mt-1 text-xs font-bold text-purple-500">⚠ Visita sospechosa — menos de 3 min en local</div>` : '';
+      ? `<div class="mt-1 text-xs font-bold text-purple-500 bg-purple-50 dark:bg-purple-900/20 rounded px-2 py-1">⚠ Visita sospechosa — menos de 3 min en local</div>`
+      : '';
+
+    // ── Indicador de primera/última visita ──
+    const badgeTxt = isFirst
+      ? `<span class="text-xs bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 px-2 py-0.5 rounded-full font-bold ml-2">INICIO</span>`
+      : isLast
+      ? `<span class="text-xs bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-2 py-0.5 rounded-full font-bold ml-2">CIERRE</span>`
+      : '';
+
+    // ── Gap antes de esta visita (pausa antes) ──
+    const pausaAntesTxt = r.minutosPausaAntes > 0
+      ? `<div class="ml-4 my-2 flex items-center gap-2 text-xs font-semibold text-red-400 bg-red-50 dark:bg-red-900/10 rounded-lg px-3 py-1.5">
+           <i class="fas fa-mug-hot text-xs"></i>
+           Pausa de ${fmtMin(r.minutosPausaAntes)} antes de esta visita
+         </div>`
+      : '';
+
+    // ── Línea de separación con flecha hacia abajo ──
+    const separatorTxt = !isLast
+      ? `<div class="ml-4 my-1 flex flex-col gap-0.5 text-xs text-gray-400 border-l-2 border-dashed border-gray-200 dark:border-slate-600 pl-3 py-1">
+           ${viajeTxt}
+           ${distTxt}
+           ${pausaDespuesTxt}
+           ${noContabTxt}
+         </div>`
+      : '';
 
     return `
-      <div class="timeline-item pb-3">
+      <div class="timeline-item pb-2">
         <div class="timeline-dot" style="background:${dotColor}"></div>
-        <div class="bg-gray-50 dark:bg-slate-700 rounded-xl p-3 border border-gray-100 dark:border-slate-600">
-          <div class="flex items-center justify-between">
-            <span class="text-xs font-bold text-indigo-600 dark:text-indigo-300">${idx+1}. ${fmtHora(r.created_at)}</span>
+        <div class="bg-gray-50 dark:bg-slate-700 rounded-xl p-3 border border-gray-100 dark:border-slate-600 ${r.esSospechosa ? 'border-purple-200 dark:border-purple-700' : ''}">
+          <div class="flex items-center justify-between flex-wrap gap-1">
+            <span class="text-xs font-bold text-indigo-600 dark:text-indigo-300">
+              ${idx+1}. ${fmtHora(r.created_at)} ${badgeTxt}
+            </span>
             ${r.distance > 0
-              ? `<span class="text-xs text-gray-400">${r.distance}m del local</span>`
+              ? `<span class="text-xs text-gray-400"><i class="fas fa-crosshairs text-xs mr-1"></i>${r.distance}m del local</span>`
               : '<span class="text-xs text-gray-300">Sin coord. cliente</span>'}
           </div>
           <p class="font-bold text-sm text-gray-800 dark:text-white mt-1">${r.trade || '—'}</p>
           <p class="text-xs text-gray-400 mt-0.5">${r.state || '—'}${r.zone ? ' / '+r.zone : ''}</p>
-          ${tiempoTxt}
+          <div class="mt-2 space-y-1">
+            ${enLocalTxt}
+          </div>
           ${alertaTxt}
         </div>
-        ${desplazTxt}
+        ${pausaAntesTxt}
+        ${separatorTxt}
       </div>`;
   }).join('');
 }
@@ -820,9 +1007,15 @@ function renderEficiencia() {
     const avgT     = conT.length ? conT.reduce((s,r)=>s+r.tiempoEstablecimiento,0)/conT.length : null;
     const conV     = sorted.filter(r => r.tiempoViaje != null && r.tiempoViaje > 0);
     const avgViaje = conV.length ? conV.reduce((s,r)=>s+r.tiempoViaje,0)/conV.length : null;
+    const totalPausa = sorted.reduce((s,r) => s + (r.minutosPausaDespues || 0), 0);
+    const totalNoContab = sorted.reduce((s,r) => s + (r.tiempoNoContabilizado || 0), 0);
     const pctConf  = d.recs.length ? Math.round(d.confs/d.recs.length*100) : 0;
+    // Tiempo productivo estimado: en local + viaje
+    const productivo = (avgT || 0) * sorted.length + (avgViaje || 0) * conV.length;
+    const pctProd   = jornada > 0 ? Math.round((totalPausa + totalNoContab) / jornada * 100) : 0;
     return { nombre, total:d.recs.length, confs:d.confs, sosp:d.sosp,
-      jornada, inicio, fin, avgT, avgViaje, pctConf };
+      jornada, inicio, fin, avgT, avgViaje, pctConf,
+      totalPausa, totalNoContab, pctProd };
   }).sort((a,b) => b.pctConf - a.pctConf);
 
   // Tarjetas de eficiencia
