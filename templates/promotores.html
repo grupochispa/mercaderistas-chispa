@@ -213,8 +213,17 @@ async function loadLineas(){
   allLineas=data||[];
 }
 async function loadAllClientes(){
-  const{data}=await db.from('web_clientes').select('id,trade_name,city,estado_id,zona_id,web_estados!web_clientes_estado_id_fkey(nombre),web_zonas!web_clientes_zona_id_fkey(nombre)').eq('empresa_id',empresaId).order('trade_name');
-  allClientes=data||[];
+  // Paginación real para cargar TODOS los clientes (no solo los primeros 1000)
+  let all=[],page=0,perPage=1000;
+  while(true){
+    const{data,error}=await db.from('web_clientes').select('id,trade_name,city,estado_id,zona_id,web_estados!web_clientes_estado_id_fkey(nombre),web_zonas!web_clientes_zona_id_fkey(nombre)').eq('empresa_id',empresaId).order('trade_name').range(page*perPage,(page+1)*perPage-1);
+    if(error||!data||!data.length)break;
+    all=all.concat(data);
+    if(data.length<perPage)break;
+    page++;
+  }
+  allClientes=all;
+  console.log(`[loadAllClientes] Cargados ${all.length} clientes`);
 }
 async function loadPromoters(){
   const{data,error}=await db.from('web_promotores').select('*,web_estados!web_promotores_estado_id_fkey(nombre),web_zonas!web_promotores_zona_id_fkey(nombre)').eq('empresa_id',empresaId).order('promoter_id');
@@ -399,34 +408,33 @@ async function cargarTablaComerciosAsignados(){
   }).join('');
 }
 
-function buscarComerciosAsignar(term){
+async function buscarComerciosAsignar(term){
   document.getElementById('cm_cliente_id_selected').value='';clearTimeout(cm_search_timer);
   const dd=document.getElementById('cm_search_dropdown');
   if(!term.trim()){dd.classList.add('hidden');return;}
-  cm_search_timer=setTimeout(()=>{
-    const tl=term.toLowerCase();
-    let filtrados=allClientes.filter(c=>c.trade_name?.toLowerCase().includes(tl));
+  cm_search_timer=setTimeout(async()=>{
+    // Construir query directa a Supabase con ilike (case-insensitive)
+    let q=db.from('web_clientes').select('id,trade_name,city,estado_id,zona_id,web_estados!web_clientes_estado_id_fkey(nombre),web_zonas!web_clientes_zona_id_fkey(nombre)',{count:'exact'}).eq('empresa_id',empresaId).ilike('trade_name',`%${term.trim()}%`);
     // Filtrar por zona si el checkbox está activado y el promotor tiene zona
     if(document.getElementById('cm_filtrar_zona').checked && cm_promoter_zona_id){
-      filtrados=filtrados.filter(c=>c.zona_id===cm_promoter_zona_id);
+      q=q.eq('zona_id',cm_promoter_zona_id);
     }
-    const totalFiltrados=filtrados.length;
-    // Paginación: mostrar hasta 20 con opción "Ver más"
-    const mostrar=filtrados.slice(0,cm_clientes_perPage);
+    q=q.order('trade_name').range(0,cm_clientes_perPage-1);
+    const{data,count,error}=await q;
     dd.innerHTML='';
-    if(!mostrar.length){
+    if(error||!data||!data.length){
       dd.innerHTML='<div class="search-item" style="color:var(--muted)">Sin resultados</div>';
     }else{
-      mostrar.forEach(c=>{
+      data.forEach(c=>{
         const d=document.createElement('div');d.className='search-item';
         const est=c.web_estados?.nombre||'';const zon=c.web_zonas?.nombre||'';
         d.innerHTML=`${c.trade_name}${c.city?' · '+c.city:''}<span class="zone-tag">${est} / ${zon}</span>`;
         d.onclick=()=>{document.getElementById('cm_search_input').value=c.trade_name;document.getElementById('cm_cliente_id_selected').value=c.id;dd.classList.add('hidden');};
         dd.appendChild(d);
       });
-      if(totalFiltrados>cm_clientes_perPage){
+      if(count && count>cm_clientes_perPage){
         const moreBtn=document.createElement('div');moreBtn.className='search-item-more';
-        moreBtn.textContent=`Mostrando ${cm_clientes_perPage} de ${totalFiltrados} — escribe más para filtrar`;
+        moreBtn.textContent=`Mostrando ${cm_clientes_perPage} de ${count} — escribe más para filtrar`;
         dd.appendChild(moreBtn);
       }
     }
