@@ -456,6 +456,19 @@ function procesarRegistros() {
     const sorted = [...recs].sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
     const totalVisitas = sorted.length;
 
+    // ── Ruta SOLO con visitas confirmadas (≤150m y con coords) ──
+    // Estas son las que se usan para calcular distancia, viaje y polilínea
+    const sortedRuta = sorted.filter(r => {
+      if (!r.latitude || !r.longitude) return false;
+      if (!r.client_coords || r.client_coords === 'N/A') return false;
+      return r.distance !== null && r.distance <= 150;
+    });
+    const totalRuta = sortedRuta.length;
+
+    // Construir mapa: id → índice en sortedRuta
+    const rutaIndexMap = {};
+    sortedRuta.forEach((r, i) => { rutaIndexMap[r.id] = i; });
+
     sorted.forEach((r, idx) => {
       const procR = processed.find(p => p.id === r.id);
       if (!procR) return;
@@ -470,32 +483,59 @@ function procesarRegistros() {
       procR.jornadaInicio = sorted[0].created_at;
       procR.jornadaFin    = sorted[totalVisitas - 1].created_at;
 
-      if (isLast) {
-        // ── ÚLTIMA VISITA del día ──────────────────────────────────
-        // No tenemos "siguiente visita" para calcular.
-        // Calculamos un tiempo estimado usando el promedio del promotor
-        // o asumimos 15 min si no hay datos suficientes
-        
-        // Obtener tiempos de visitas anteriores de este promotor
+      // ── ¿Esta visita está en la ruta confirmada? ──
+      const enRuta = rutaIndexMap.hasOwnProperty(r.id);
+      const rutaIdx = enRuta ? rutaIndexMap[r.id] : -1;
+
+      if (!enRuta) {
+        // ── VISITA NO CONFIRMADA: NO participa en la ruta ──────────
+        // No calculamos distancia ni viaje desde/hacia esta visita
+        // Tiempo estimado por defecto según promedio del promotor
         const tiemposPrevios = sorted
-          .slice(0, -1)  // todas menos la última
-          .map(prev => {
-            const p = processed.find(p2 => p2.id === prev.id);
-            return p ? p.tiempoEstablecimiento : 0;
-          })
+          .filter(s => s.id !== r.id)
+          .map(s => { const p = processed.find(p2 => p2.id === s.id); return p ? p.tiempoEstablecimiento : 0; })
           .filter(t => t !== null && t > 0);
         
-        let estimado = 15; // 15 min por defecto para la última
+        let estimado = 15;
         if (tiemposPrevios.length >= 2) {
-          // Usar el promedio del promotor, sin contar valores extremos
           const sortedT = [...tiemposPrevios].sort((a,b) => a-b);
           const mid = sortedT.slice(Math.floor(sortedT.length*0.25), Math.ceil(sortedT.length*0.75));
           estimado = mid.length ? Math.round(mid.reduce((a,b)=>a+b,0)/mid.length) : Math.round(tiemposPrevios.reduce((a,b)=>a+b,0)/tiemposPrevios.length);
         } else if (tiemposPrevios.length === 1) {
           estimado = Math.round(tiemposPrevios[0]);
         }
+        estimado = Math.max(3, Math.min(120, estimado));
+
+        procR.tiempoEstablecimiento = estimado;
+        procR.tiempoViaje = null;          // No participa en ruta
+        procR.distanciaAlSiguiente = null;
+        procR.excluidaDeRuta = true;       // Flag para UI
+        return;  // ← saltar al siguiente registro
+      }
+
+      // ── VISITA CONFIRMADA: buscar siguiente en la RUTA confirmada ──
+      procR.excluidaDeRuta = false;
+
+      const esUltimaEnRuta = rutaIdx === totalRuta - 1;
+
+      if (esUltimaEnRuta || totalRuta <= 1) {
+        // ── ÚLTIMA visita confirmada de la ruta ─────────────────────
+        const tiemposPrevios = sortedRuta
+          .slice(0, -1)
+          .map(prev => {
+            const p = processed.find(p2 => p2.id === prev.id);
+            return p ? p.tiempoEstablecimiento : 0;
+          })
+          .filter(t => t !== null && t > 0);
         
-        // No exceder 120 min ni ser menor a 3 min
+        let estimado = 15;
+        if (tiemposPrevios.length >= 2) {
+          const sortedT = [...tiemposPrevios].sort((a,b) => a-b);
+          const mid = sortedT.slice(Math.floor(sortedT.length*0.25), Math.ceil(sortedT.length*0.75));
+          estimado = mid.length ? Math.round(mid.reduce((a,b)=>a+b,0)/mid.length) : Math.round(tiemposPrevios.reduce((a,b)=>a+b,0)/tiemposPrevios.length);
+        } else if (tiemposPrevios.length === 1) {
+          estimado = Math.round(tiemposPrevios[0]);
+        }
         estimado = Math.max(3, Math.min(120, estimado));
         
         procR.tiempoEstablecimiento = estimado;
@@ -503,53 +543,39 @@ function procesarRegistros() {
         procR.distanciaAlSiguiente = null;
 
       } else {
-        // ── VISITA INTERMEDIA (no es la última) ─────────────────────
-        const next     = sorted[idx + 1];
-        const procNext = processed.find(p => p.id === next.id);
+        // ── VISITA CONFIRMADA INTERMEDIA ────────────────────────────
+        const nextRuta = sortedRuta[rutaIdx + 1];
+        const procNext = processed.find(p => p.id === nextRuta.id);
 
-        // Tiempo total entre inicio de esta visita e inicio de la siguiente
-        const totalMin = (new Date(next.created_at) - new Date(r.created_at)) / 60000;
+        const totalMin = (new Date(nextRuta.created_at) - new Date(r.created_at)) / 60000;
 
-        // Detectar si hay pausa/almuerzo entre estas visitas
-        const pausaMin = esPausa(r.created_at, next.created_at) 
-          ? Math.round((new Date(next.created_at) - new Date(r.created_at)) / 60000)
+        const pausaMin = esPausa(r.created_at, nextRuta.created_at) 
+          ? Math.round((new Date(nextRuta.created_at) - new Date(r.created_at)) / 60000)
           : 0;
 
-        // Calcular distancia y tiempo de viaje estimado
         let distMetros = null;
         let viajeMin   = 0;
 
-        if (r.latitude && r.longitude && next.latitude && next.longitude) {
+        if (r.latitude && r.longitude && nextRuta.latitude && nextRuta.longitude) {
           distMetros = haversineDist(
             parseFloat(r.latitude),   parseFloat(r.longitude),
-            parseFloat(next.latitude), parseFloat(next.longitude)
+            parseFloat(nextRuta.latitude), parseFloat(nextRuta.longitude)
           );
           procR.distanciaAlSiguiente = Math.round(distMetros);
           viajeMin = estimarTiempoViaje(distMetros);
         }
 
-        // ── Desglose del tiempo entre visitas ──────────────────
-        // tiempo_total = tiempo_en_local + tiempo_viaje + pausa + no_contabilizado
         let tiempoRealMin = 0;
         let noContab = 0;
 
         if (pausaMin > 0) {
-          // Hay pausa (almuerzo): tiempo_en_local es solo hasta que empezó la pausa
-          // Asumimos que la pausa ocurre DESPUÉS del viaje
-          // Ej: Visita A (10:00) → viaje (10min) → pausa (60min) → Visita B (11:10)
-          // tiempo_en_local_A = 10:10 - 10:00 - viaje(10min) = 0? No, asumimos visita corta
-          // Mejor: si hay pausa, el tiempo_en_local es lo que queda después de viaje, mínimo 3 min
           const restanteSinViaje = totalMin - viajeMin - pausaMin;
           tiempoRealMin = Math.max(3, restanteSinViaje);
           noContab = pausaMin;
           procR.minutosPausaDespues = pausaMin;
           if (procNext) procNext.minutosPausaAntes = pausaMin;
         } else {
-          // Sin pausa detectable
           tiempoRealMin = Math.max(0, totalMin - viajeMin);
-
-          // Si el tiempo en local es excesivo (>120 min) sin pausa,
-          // probablemente hay tiempo no contabilizado (espera, trámites, etc.)
           if (tiempoRealMin > 120) {
             const exceso = tiempoRealMin - 120;
             tiempoRealMin = 120;
@@ -561,13 +587,11 @@ function procesarRegistros() {
         procR.tiempoViaje            = viajeMin;
         procR.tiempoNoContabilizado  = noContab > 0 ? noContab : null;
 
-        // Sospechosa: tiempo real en local < 3 min tras descontar viaje
         if (tiempoRealMin < 3) {
           procR.esSospechosa = true;
           if (procNext) procNext.esSospechosa = true;
         }
 
-        // Sospechosa: distancia imposible > 50km en < 10 min totales
         if (distMetros && distMetros > 50000 && totalMin < 10) {
           procR.esSospechosa = true;
           if (procNext) procNext.esSospechosa = true;
