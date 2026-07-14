@@ -32,7 +32,21 @@
         <div><label class="sp-label">ID Promotor *</label><input type="text" id="promoter_id" class="sp-input" required oninput="this.value=this.value.toUpperCase()"></div>
         <div><label class="sp-label">Nombre *</label><input type="text" id="promoter_name" class="sp-input" required oninput="this.value=this.value.toUpperCase()"></div>
         <div><label class="sp-label">Estado *</label><select id="estado_id" class="sp-select" required onchange="loadZonas(this.value)"><option value="">Seleccione…</option></select></div>
-        <div><label class="sp-label">Zona *</label><select id="zona_id" class="sp-select" disabled required><option value="">Seleccione…</option></select></div>
+        <div>
+          <label class="sp-label">Zona *</label>
+          <div style="display:flex;gap:4px">
+            <select id="zona_id" class="sp-select" disabled required style="flex:1"><option value="">Seleccione…</option></select>
+            <button type="button" id="btnNuevaZonaAdd" class="sp-btn sp-btn-sec sp-btn-sm" disabled onclick="mostrarNuevaZona('add')" title="Nueva zona" style="padding:0 10px;font-size:1.1rem">+</button>
+          </div>
+          <div id="nuevaZonaAdd" style="display:none;margin-top:6px;padding:8px;background:var(--accent-soft);border-radius:8px">
+            <input type="text" id="nuevaZonaNombreAdd" class="sp-input" placeholder="Nombre de la nueva zona" style="margin-bottom:6px;font-size:.82rem">
+            <div style="display:flex;gap:6px">
+              <button type="button" class="sp-btn sp-btn-primary sp-btn-sm" onclick="crearZona('add')"><i class="fas fa-check"></i> Crear</button>
+              <button type="button" class="sp-btn sp-btn-sec sp-btn-sm" onclick="cancelarNuevaZona('add')">Cancelar</button>
+            </div>
+            <p id="nuevaZonaMsgAdd" style="font-size:.72rem;margin-top:4px;display:none"></p>
+          </div>
+        </div>
         <div><label class="sp-label">Clientes asignados</label><input type="number" id="clientes_asig" class="sp-input" min="0" value="0"></div>
         <div><label class="sp-label">Días de trabajo</label><input type="number" id="dias_trabajo" class="sp-input" min="0" value="0"></div>
         <div>
@@ -93,7 +107,21 @@
           <div><label class="sp-label">ID</label><input type="text" id="edit_promoter_id_display" class="sp-input" disabled style="opacity:.5"></div>
           <div><label class="sp-label">Nombre *</label><input type="text" id="edit_promoter_name" class="sp-input" required oninput="this.value=this.value.toUpperCase()"></div>
           <div><label class="sp-label">Estado *</label><select id="edit_estado_id" class="sp-select" required onchange="loadZonas(this.value,'edit_zona_id')"><option value="">Seleccione…</option></select></div>
-          <div><label class="sp-label">Zona *</label><select id="edit_zona_id" class="sp-select" disabled required><option value="">Seleccione…</option></select></div>
+          <div>
+            <label class="sp-label">Zona *</label>
+            <div style="display:flex;gap:4px">
+              <select id="edit_zona_id" class="sp-select" disabled required style="flex:1"><option value="">Seleccione…</option></select>
+              <button type="button" id="btnNuevaZonaEdit" class="sp-btn sp-btn-sec sp-btn-sm" disabled onclick="mostrarNuevaZona('edit')" title="Nueva zona" style="padding:0 10px;font-size:1.1rem">+</button>
+            </div>
+            <div id="nuevaZonaEdit" style="display:none;margin-top:6px;padding:8px;background:var(--accent-soft);border-radius:8px">
+              <input type="text" id="nuevaZonaNombreEdit" class="sp-input" placeholder="Nombre de la nueva zona" style="margin-bottom:6px;font-size:.82rem">
+              <div style="display:flex;gap:6px">
+                <button type="button" class="sp-btn sp-btn-primary sp-btn-sm" onclick="crearZona('edit')"><i class="fas fa-check"></i> Crear</button>
+                <button type="button" class="sp-btn sp-btn-sec sp-btn-sm" onclick="cancelarNuevaZona('edit')">Cancelar</button>
+              </div>
+              <p id="nuevaZonaMsgEdit" style="font-size:.72rem;margin-top:4px;display:none"></p>
+            </div>
+          </div>
           <div><label class="sp-label">Clientes asignados</label><input type="number" id="edit_clientes_asig" class="sp-input" min="0"></div>
           <div><label class="sp-label">Días de trabajo</label><input type="number" id="edit_dias_trabajo" class="sp-input" min="0"></div>
         </div>
@@ -203,10 +231,50 @@ async function loadEstados(sid='estado_id'){
 }
 async function loadZonas(estadoId,sid='zona_id'){
   const sel=document.getElementById(sid);sel.innerHTML='<option value="">Seleccione una zona</option>';sel.disabled=!estadoId;
-  if(!estadoId)return;
+  // Habilitar/deshabilitar botón de nueva zona
+  const prefix=sid==='zona_id'?'add':'edit';
+  const btn=document.getElementById('btnNuevaZona'+(prefix==='add'?'Add':'Edit'));
+  if(!estadoId){if(btn)btn.disabled=true;return;}
   const{data}=await db.from('web_zonas').select('*').eq('estado_id',estadoId).order('nombre');
   allZonas=data||[];sel.disabled=false;
   allZonas.forEach(z=>sel.innerHTML+=`<option value="${z.id}">${z.nombre}</option>`);
+  if(btn)btn.disabled=false;
+  // Ocultar el panel de nueva zona si estaba abierto
+  const panel=document.getElementById('nuevaZona'+(prefix==='add'?'Add':'Edit'));
+  if(panel)panel.style.display='none';
+}
+
+// ── Crear nueva zona ─────────────────────────────────────────
+function mostrarNuevaZona(prefix){
+  const panel=document.getElementById('nuevaZona'+(prefix==='add'?'Add':'Edit'));
+  const input=document.getElementById('nuevaZonaNombre'+(prefix==='add'?'Add':'Edit'));
+  const msg=document.getElementById('nuevaZonaMsg'+(prefix==='add'?'Add':'Edit'));
+  if(panel.style.display==='none'||!panel.style.display){
+    panel.style.display='block';input.value='';if(msg)msg.style.display='none';input.focus();
+  }else{panel.style.display='none';}
+}
+function cancelarNuevaZona(prefix){
+  document.getElementById('nuevaZona'+(prefix==='add'?'Add':'Edit')).style.display='none';
+  document.getElementById('nuevaZonaNombre'+(prefix==='add'?'Add':'Edit')).value='';
+}
+async function crearZona(prefix){
+  const estadoId=prefix==='add'?document.getElementById('estado_id').value:document.getElementById('edit_estado_id').value;
+  const nombre=document.getElementById('nuevaZonaNombre'+(prefix==='add'?'Add':'Edit')).value.trim().toUpperCase();
+  const msg=document.getElementById('nuevaZonaMsg'+(prefix==='add'?'Add':'Edit'));
+  if(!nombre){if(msg){msg.style.display='block';msg.style.color='var(--red)';msg.textContent='Ingresa un nombre para la zona.';}return;}
+  if(!estadoId){if(msg){msg.style.display='block';msg.style.color='var(--red)';msg.textContent='Selecciona un estado primero.';}return;}
+  // Validar que no exista una zona con ese nombre en este estado (case-insensitive)
+  const{data:dup}=await db.from('web_zonas').select('id').eq('estado_id',estadoId).ilike('nombre',nombre).maybeSingle();
+  if(dup){if(msg){msg.style.display='block';msg.style.color='var(--red)';msg.textContent=`Ya existe una zona "${nombre}" en este estado.`;}return;}
+  const{data:newZ,error}=await db.from('web_zonas').insert([{estado_id:estadoId,nombre:nombre}]).select('id,nombre').single();
+  if(error){if(msg){msg.style.display='block';msg.style.color='var(--red)';msg.textContent='Error: '+error.message;}return;}
+  if(msg){msg.style.display='block';msg.style.color='var(--green)';msg.textContent=`Zona "${nombre}" creada.`;}
+  // Recargar zonas y seleccionar la nueva
+  const sid=prefix==='add'?'zona_id':'edit_zona_id';
+  await loadZonas(estadoId,sid);
+  document.getElementById(sid).value=newZ.id;
+  // Ocultar panel después de 1.5s
+  setTimeout(()=>{document.getElementById('nuevaZona'+(prefix==='add'?'Add':'Edit')).style.display='none';if(msg)msg.style.display='none';},1500);
 }
 async function loadLineas(){
   const{data}=await db.from('web_lineas').select('id,nombre').eq('empresa_id',empresaId).eq('activa',true).order('nombre');

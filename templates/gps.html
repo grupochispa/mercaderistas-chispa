@@ -71,8 +71,13 @@
     <h2 class="text-base font-bold text-gray-700 dark:text-white mb-4">Filtros</h2>
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
       <div>
-        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Fecha</label>
-        <input type="date" id="fechaSelect"
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Desde</label>
+        <input type="date" id="fechaDesde"
+          class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm">
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Hasta</label>
+        <input type="date" id="fechaHasta"
           class="w-full h-10 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm">
       </div>
       <div>
@@ -365,17 +370,20 @@ async function loadCatalogs() {
 
 // ── Fetch principal ───────────────────────────────────────────────
 async function cargar() {
-  const fecha   = document.getElementById('fechaSelect').value;
+  const desde   = document.getElementById('fechaDesde').value;
+  const hasta   = document.getElementById('fechaHasta').value;
   const prom    = document.getElementById('promotorSelect').value;
   const estado  = document.getElementById('estadoSelect').value;
   const lineaId = localStorage.getItem('sp-linea') || '';
 
   const p = new URLSearchParams();
-  if (fecha) { p.append('date_from', fecha); p.append('date_to', fecha); }
-  else {
+  if (desde) p.append('date_from', desde);
+  if (hasta) p.append('date_to', hasta);
+  if (!desde && !hasta) {
     const hoy = new Date(Date.now() - 4*3600000).toISOString().split('T')[0];
     p.append('date_from', hoy); p.append('date_to', hoy);
-    document.getElementById('fechaSelect').value = hoy;
+    document.getElementById('fechaDesde').value = hoy;
+    document.getElementById('fechaHasta').value = hoy;
   }
   if (prom !== 'all') p.append('promoter_id', prom);
   if (lineaId)        p.append('linea_id', lineaId);
@@ -1171,6 +1179,8 @@ function renderDetalle() {
 
 // ── Limpiar ───────────────────────────────────────────────────────
 function limpiar() {
+  document.getElementById('fechaDesde').value   = '';
+  document.getElementById('fechaHasta').value   = '';
   document.getElementById('promotorSelect').value = 'all';
   document.getElementById('estadoSelect').value   = 'all';
   document.getElementById('confirmSelect').value  = 'all';
@@ -1180,7 +1190,8 @@ function limpiar() {
 // ── Init ──────────────────────────────────────────────────────────
 function setDefaultDate() {
   const hoy = new Date(Date.now() - 4*3600000).toISOString().split('T')[0];
-  document.getElementById('fechaSelect').value = hoy;
+  document.getElementById('fechaDesde').value = hoy;
+  document.getElementById('fechaHasta').value = hoy;
 }
 
 window.onLineaChanged = (lineaId) => {

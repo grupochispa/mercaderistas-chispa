@@ -192,13 +192,19 @@
       <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
         <div>
           <h3 class="text-sm font-bold text-gray-700 dark:text-white">Evolución del precio en el tiempo</h3>
-          <p class="text-xs text-gray-400 mt-0.5">Selecciona un producto para ver su curva de precios</p>
+          <p class="text-xs text-gray-400 mt-0.5">Selecciona un producto para ver su curva de precios por día o mes</p>
         </div>
-        <select id="selectorProductoEvol" class="h-9 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm min-w-48" onchange="drawChartEvolucion()">
-          <option value="">— Selecciona producto —</option>
-        </select>
+        <div class="flex items-center gap-3">
+          <select id="selectorProductoEvol" class="h-9 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm min-w-48" onchange="drawChartEvolucion()">
+            <option value="">— Selecciona producto —</option>
+          </select>
+          <select id="evolAgrupacion" class="h-9 border border-gray-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg px-3 text-sm" onchange="drawChartEvolucion()">
+            <option value="dia">Por día</option>
+            <option value="mes">Por mes</option>
+          </select>
+        </div>
       </div>
-      <div style="position:relative;height:320px"><canvas id="chartEvolucion"></canvas></div>
+      <div style="position:relative;height:360px"><canvas id="chartEvolucion"></canvas></div>
     </div>
 
     <!-- Tab: Por zona/estado -->
@@ -745,43 +751,90 @@ function drawChartComparativa() {
 // ── Evolución en el tiempo ──
 function drawChartEvolucion() {
   const producto = $('selectorProductoEvol').value;
+  const agrupacion = $('evolAgrupacion')?.value || 'dia';
   const { tc, gc } = chartColors();
   destroyChart('chartEvolucion');
   if (!producto) return;
+
+  // Helper para obtener la clave de agrupación
+  const getKey = (fecha) => {
+    if (!fecha) return 'sin-fecha';
+    const d = new Date(fecha);
+    if (agrupacion === 'mes') {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      return `${year}-${month}`;
+    }
+    // Por día
+    return d.toISOString().split('T')[0];
+  };
+
+  // Helper para formatear label según agrupación
+  const fmtLabel = (key) => {
+    if (agrupacion === 'mes' && key.length === 7) {
+      const [y, m] = key.split('-');
+      const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+      return `${meses[parseInt(m)-1]} ${y}`;
+    }
+    return key;
+  };
 
   // Filtrar data: solo nuestro producto seleccionado, agrupar por fecha
   const fechas = {};
   nuestrosPrecios.forEach(f => {
     if (f.nuestroProd !== producto) return;
-    const dia = f.fecha ? new Date(f.fecha).toISOString().split('T')[0] : 'sin-fecha';
-    if (!fechas[dia]) fechas[dia] = { n:[], c:[] };
-    fechas[dia].n.push(f.nUSD);
+    const key = getKey(f.fecha);
+    if (!fechas[key]) fechas[key] = { n:[], c:[] };
+    fechas[key].n.push(f.nUSD);
   });
   // También agregar datos de competencia si hay analisisData
   analisisData.forEach(f => {
     if (f.nuestroProd !== producto || !f.cUSD) return;
-    const dia = f.fecha ? new Date(f.fecha).toISOString().split('T')[0] : 'sin-fecha';
-    if (!fechas[dia]) fechas[dia] = { n:[], c:[] };
-    fechas[dia].c.push(f.cUSD);
+    const key = getKey(f.fecha);
+    if (!fechas[key]) fechas[key] = { n:[], c:[] };
+    fechas[key].c.push(f.cUSD);
   });
 
-  const labels = Object.keys(fechas).sort();
-  if (!labels.length) return;
+  const labelsRaw = Object.keys(fechas).sort();
+  const labels = labelsRaw.map(fmtLabel);
+  if (!labelsRaw.length) return;
+
+  // Cantidad de puntos por dataset para mostrar conteo en tooltip
+  const puntosN = labelsRaw.map(k => fechas[k].n.length);
+  const puntosC = labelsRaw.map(k => fechas[k].c.length);
 
   chartInst['chartEvolucion'] = new Chart($('chartEvolucion').getContext('2d'), {
     type: 'line',
     data: {
       labels,
       datasets: [
-        { label:`${producto} (USD)`, data:labels.map(d=>+avg(fechas[d].n).toFixed(2)), borderColor:'#4f46e5', backgroundColor:'rgba(79,70,229,.1)', fill:true, tension:.3, pointRadius:4 },
-        { label:'Competidor (USD)', data:labels.map(d=>fechas[d].c.length ? +avg(fechas[d].c).toFixed(2) : null), borderColor:'#ef4444', backgroundColor:'rgba(239,68,68,.1)', fill:true, tension:.3, pointRadius:4, borderDash:[5,5] }
+        { label:`Nuestro (USD)`, data:labelsRaw.map(k=>+avg(fechas[k].n).toFixed(2)), borderColor:'#4f46e5', backgroundColor:'rgba(79,70,229,.1)', fill:true, tension:.3, pointRadius:5 },
+        { label:'Competidor (USD)', data:labelsRaw.map(k=>fechas[k].c.length ? +avg(fechas[k].c).toFixed(2) : null), borderColor:'#ef4444', backgroundColor:'rgba(239,68,68,.1)', fill:true, tension:.3, pointRadius:5, borderDash:[5,5] }
       ]
     },
     options: {
       responsive:true, maintainAspectRatio:false,
-      plugins: { legend: { labels:{ color:tc, font:{size:11} }}},
+      interaction: { mode:'index', intersect:false },
+      plugins: { 
+        legend: { labels:{ color:tc, font:{size:11} }},
+        tooltip: {
+          callbacks: {
+            label: function(ctx) {
+              let label = ctx.dataset.label || '';
+              if (label) label += ': ';
+              if (ctx.parsed.y !== null && ctx.parsed.y !== undefined) {
+                label += '$' + ctx.parsed.y.toFixed(2);
+              }
+              const idx = ctx.dataIndex;
+              const pts = ctx.datasetIndex === 0 ? puntosN[idx] : puntosC[idx];
+              if (pts > 1) label += `  (${pts} registros)`;
+              return label;
+            }
+          }
+        }
+      },
       scales: {
-        x: { ticks:{ color:tc, font:{size:10} }, grid:{color:gc} },
+        x: { ticks:{ color:tc, font:{size:agrupacion==='mes'?11:10}, maxRotation:agrupacion==='mes'?45:0 }, grid:{color:gc} },
         y: { ticks:{ color:tc, font:{size:10}, callback:v=>'$'+v.toFixed(2)}, grid:{color:gc} }
       }
     }
