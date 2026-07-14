@@ -199,7 +199,7 @@ async function loadZonas(estadoId,sid){
   const sel=document.getElementById(sid);sel.innerHTML='<option value="">Seleccione una zona</option>';sel.disabled=!estadoId;
   // Habilitar/deshabilitar botón de nueva zona
   const prefix=sid==='zona_id'?'add':'edit';
-  const btn=document.getElementById('btnNuevaZona'+prefix==='add'?'Add':'Edit');
+  const btn=document.getElementById('btnNuevaZona'+(prefix==='add'?'Add':'Edit'));
   if(!estadoId){if(btn)btn.disabled=true;return;}
   const{data}=await db.from('web_zonas').select('*').eq('estado_id',estadoId).order('nombre');
   allZonas=data||[];sel.disabled=false;
