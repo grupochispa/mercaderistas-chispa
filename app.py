@@ -16,7 +16,7 @@ app = Flask(__name__)
 # ═══════════════════════════════════════════════════════════════════════════════
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'tu-clave-secreta-super-larga-y-segura-2025-xyz123')
 
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://fnmjdevxbimprposrhie.supabase.co")
+SUPABASE_URL = os.getenv("SUPABASE_URL",https://fnmjdevxbimprposrhie.supabase.co)
 SUPABASE_KEY = os.getenv('SUPABASE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZubWpkZXZ4YmltcHJwb3NyaGllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0MTEzMDQsImV4cCI6MjEwNzk4NzMwNH0.QsOUXyiK8nFp3ZNtYBg5vDWwIKhhdctO-V91BjlLdqc')
 
 HEADERS = {
