@@ -1,10 +1,12 @@
 from flask import Flask, render_template, jsonify, request, session, redirect, url_for
 import requests
 import os
+import sys
 import time
+import threading
 from math import radians, sin, cos, sqrt, atan2
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 
 app = Flask(__name__)
@@ -14,8 +16,8 @@ app = Flask(__name__)
 # ═══════════════════════════════════════════════════════════════════════════════
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'tu-clave-secreta-super-larga-y-segura-2025-xyz123')
 
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://czykohaerbcfpxenmssj.supabase.co")
-SUPABASE_KEY = os.getenv('SUPABASE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN6eWtvaGFlcmJjZnB4ZW5tc3NqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc4OTk5MDUsImV4cCI6MjA5MzQ3NTkwNX0.-emgKcogZ1cyG7tya4FN6FpAEu7TwUlFjUfwLcEMHHY')
+SUPABASE_URL = os.getenv("SUPABASE_URL", "https://fnmjdevxbimprposrhie.supabase.co")
+SUPABASE_KEY = os.getenv('SUPABASE_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZubWpkZXZ4YmltcHJwb3NyaGllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI0MTEzMDQsImV4cCI6MjEwNzk4NzMwNH0.QsOUXyiK8nFp3ZNtYBg5vDWwIKhhdctO-V91BjlLdqc')
 
 HEADERS = {
     "apikey": SUPABASE_KEY,
@@ -23,6 +25,18 @@ HEADERS = {
     "Content-Type": "application/json",
     "Prefer": "count=exact"
 }
+
+# Fotos de visita: se conservan 2 meses y luego se borran del bucket.
+# La fila de web_precios (precios, stock, caras, GPS, comentarios) se mantiene.
+PHOTO_RETENTION_MONTHS = int(os.getenv("PHOTO_RETENTION_MONTHS", "2"))
+# Plan Free de Supabase: 1 GB. Al llegar al 80 % se borran fotos de visita
+# aunque tengan menos de 2 meses, de la más antigua a la más nueva.
+STORAGE_LIMIT_BYTES = int(os.getenv("STORAGE_LIMIT_BYTES", str(1024 ** 3)))
+STORAGE_HEADROOM_RATIO = float(os.getenv("STORAGE_HEADROOM_RATIO", "0.8"))
+VISIT_PHOTO_BUCKET = "visits_photos"
+VISIT_PHOTO_FOLDERS = ("before", "after")
+_PHOTO_PURGE_LOCK = threading.Lock()
+_photo_retention_started = False
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CACHÉ EN MEMORIA CON TTL
@@ -927,13 +941,14 @@ def upload_planogram():
 
     try:
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        file_name = f"planogramas/{empresa_id}/planograma_{timestamp}{ext}"
+        raw, content_type = _compress_image_bytes(file.read())
+        file_name = f"planogramas/{empresa_id}/planograma_{timestamp}.jpg"
         storage_url = f"{SUPABASE_URL}/storage/v1/object/visits_photos/{file_name}"
         upload_resp = requests.put(
             storage_url,
             headers={"Authorization": f"Bearer {SUPABASE_KEY}",
-                     "Content-Type": file.content_type or "image/jpeg"},
-            data=file.read(),
+                     "Content-Type": content_type},
+            data=raw,
             timeout=30
         )
         if upload_resp.status_code not in (200, 201):
@@ -1110,7 +1125,399 @@ def api_lineas():
 
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# RETENCIÓN DE FOTOS
+# Borra before/ y after/ en visits_photos: por antigüedad (2 meses)
+# y, si el bucket va a pasar el límite, también las más recientes.
+# La fila de web_precios se conserva; solo se vacían las fotos.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _parse_ts(value):
+    if not value:
+        return None
+    text = str(value).replace("Z", "+00:00")
+    try:
+        dt = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def _photo_cutoff():
+    """Fecha límite: visitas más antiguas que 2 meses pierden sus fotos."""
+    now = datetime.now(timezone.utc)
+    month = now.month - PHOTO_RETENTION_MONTHS
+    year = now.year
+    while month <= 0:
+        month += 12
+        year -= 1
+    # El día se ajusta si el mes destino es más corto (31 ene → 28 feb).
+    day = min(now.day, [31, 29 if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0) else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1])
+    return now.replace(year=year, month=month, day=day)
+
+
+def _compress_image_bytes(data: bytes, max_edge: int = 1280, quality: int = 60):
+    """Devuelve JPEG reducido. Lado mayor de 1280 px y calidad 60."""
+    from io import BytesIO
+    from PIL import Image, ImageOps
+
+    img = ImageOps.exif_transpose(Image.open(BytesIO(data)))
+    if img.mode != "RGB":
+        img = img.convert("RGB")
+    width, height = img.size
+    scale = min(1.0, max_edge / max(width, height))
+    if scale < 1:
+        img = img.resize(
+            (max(1, int(width * scale)), max(1, int(height * scale))),
+            Image.Resampling.LANCZOS,
+        )
+    out = BytesIO()
+    img.save(out, format="JPEG", quality=quality, optimize=True)
+    return out.getvalue(), "image/jpeg"
+
+
+def _storage_paths_for_photos(photos, folder):
+    """Rutas dentro del bucket. Ignora base64 y planogramas."""
+    paths = []
+    for photo in safe_json_parse(photos):
+        if not isinstance(photo, str):
+            continue
+        photo = photo.strip()
+        if not photo or photo.startswith("data:"):
+            continue
+        path = None
+        for marker in (
+            f"/object/public/{VISIT_PHOTO_BUCKET}/",
+            f"/object/{VISIT_PHOTO_BUCKET}/",
+        ):
+            if marker in photo:
+                path = photo.split(marker, 1)[1].split("?", 1)[0].lstrip("/")
+                break
+        if path is None and not photo.startswith("http"):
+            path = photo if "/" in photo else f"{folder}/{photo}"
+        if not path or path.startswith("planogramas/") or ".." in path.split("/"):
+            continue
+        if not path.startswith(f"{folder}/") and "/" not in path:
+            path = f"{folder}/{path}"
+        paths.append(path)
+    return paths
+
+
+def _has_stored_photos(record):
+    before = safe_json_parse(record.get("before_photos"))
+    after = safe_json_parse(record.get("after_photos"))
+    return bool(before or after)
+
+
+def _restricted_message(resp):
+    body = (resp.text or "")[:300]
+    if resp.status_code >= 400 and (
+        "restricted" in body.lower() or "exceed_storage" in body.lower()
+    ):
+        return body
+    return None
+
+
+def _delete_storage_paths(paths):
+    """Borra objetos del bucket. Devuelve (cantidad, error)."""
+    deleted = 0
+    unique = list(dict.fromkeys(paths))
+    url = f"{SUPABASE_URL}/storage/v1/object/{VISIT_PHOTO_BUCKET}"
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+    }
+    for i in range(0, len(unique), 100):
+        batch = unique[i:i + 100]
+        resp = requests.delete(url, headers=headers, json={"prefixes": batch}, timeout=60)
+        restricted = _restricted_message(resp)
+        if restricted:
+            return deleted, restricted
+        if resp.status_code not in (200, 204):
+            return deleted, f"storage {resp.status_code}: {(resp.text or '')[:300]}"
+        deleted += len(batch)
+    return deleted, None
+
+
+def _clear_photo_columns(record_ids):
+    cleared = 0
+    headers = {**HEADERS, "Prefer": "return=minimal"}
+    for i in range(0, len(record_ids), 50):
+        batch = record_ids[i:i + 50]
+        id_list = ",".join(str(rid) for rid in batch)
+        resp = requests.patch(
+            f"{SUPABASE_URL}/rest/v1/web_precios?id=in.({id_list})",
+            headers=headers,
+            json={"before_photos": [], "after_photos": []},
+            timeout=30,
+        )
+        restricted = _restricted_message(resp)
+        if restricted:
+            return cleared, restricted
+        if resp.status_code not in (200, 204):
+            return cleared, f"web_precios {resp.status_code}: {(resp.text or '')[:300]}"
+        cleared += len(batch)
+    return cleared, None
+
+
+def _purge_from_records(cutoff):
+    cutoff_iso = cutoff.strftime("%Y-%m-%dT%H:%M:%SZ")
+    offset = 0
+    page_size = 200
+    files = []
+    record_ids = []
+    pages = 0
+    while pages < 250:
+        pages += 1
+        headers = {**HEADERS, "Range": f"{offset}-{offset + page_size - 1}"}
+        resp = requests.get(
+            f"{SUPABASE_URL}/rest/v1/web_precios",
+            headers=headers,
+            params=[
+                ("select", "id,created_at,before_photos,after_photos"),
+                ("created_at", f"lt.{cutoff_iso}"),
+                ("order", "created_at.asc"),
+            ],
+            timeout=30,
+        )
+        restricted = _restricted_message(resp)
+        if restricted:
+            return None, restricted
+        if not resp.ok:
+            return None, f"web_precios {resp.status_code}: {(resp.text or '')[:300]}"
+        rows = resp.json()
+        if not rows:
+            break
+        for row in rows:
+            if not _has_stored_photos(row):
+                continue
+            record_ids.append(row.get("id"))
+            files.extend(_storage_paths_for_photos(row.get("before_photos"), "before"))
+            files.extend(_storage_paths_for_photos(row.get("after_photos"), "after"))
+        if len(rows) < page_size:
+            break
+        offset += page_size
+    return {"files": files, "record_ids": [rid for rid in record_ids if rid is not None]}, None
+
+
+def _storage_headers():
+    return {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+    }
+
+
+def _object_size(obj):
+    meta = obj.get("metadata") or {}
+    if isinstance(meta, str):
+        try:
+            meta = json.loads(meta)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            meta = {}
+    try:
+        return int(meta.get("size") or meta.get("contentLength") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _list_bucket_files():
+    """Lista before/, after/ y planogramas/ con fecha y peso."""
+    found = []
+    headers = _storage_headers()
+    prefixes = [f"{folder}/" for folder in VISIT_PHOTO_FOLDERS] + ["planogramas/"]
+    for prefix in prefixes:
+        offset = 0
+        protected = prefix.startswith("planogramas/")
+        while offset < 200000:
+            resp = requests.post(
+                f"{SUPABASE_URL}/storage/v1/object/list/{VISIT_PHOTO_BUCKET}",
+                headers=headers,
+                json={
+                    "prefix": prefix,
+                    "limit": 100,
+                    "offset": offset,
+                    "sortBy": {"column": "created_at", "order": "asc"},
+                },
+                timeout=30,
+            )
+            restricted = _restricted_message(resp)
+            if restricted:
+                return None, restricted
+            if not resp.ok:
+                return None, f"list {resp.status_code}: {(resp.text or '')[:300]}"
+            objects = resp.json() or []
+            if not objects:
+                break
+            for obj in objects:
+                name = (obj.get("name") or "").strip()
+                if not name or name.endswith("/") or obj.get("id") is None:
+                    continue
+                path = name if name.startswith(prefix) else f"{prefix}{name}"
+                if ".." in path.split("/"):
+                    continue
+                found.append({
+                    "path": path,
+                    "created": _parse_ts(obj.get("created_at") or obj.get("updated_at")),
+                    "size": _object_size(obj),
+                    "protected": protected,
+                })
+            if len(objects) < 100:
+                break
+            offset += 100
+    return found, None
+
+
+def _select_files_to_delete(objects, cutoff):
+    """2 meses siempre. Si el peso llega al 80 % del límite, sigue por las más viejas."""
+    threshold = int(STORAGE_LIMIT_BYTES * STORAGE_HEADROOM_RATIO)
+    visit = [obj for obj in objects if not obj["protected"]]
+    total = sum(obj["size"] for obj in objects)
+    aged = [obj for obj in visit if obj["created"] is not None and obj["created"] < cutoff]
+    selected = list(aged)
+    remaining = total - sum(obj["size"] for obj in selected)
+    emergency = 0
+    if remaining >= threshold:
+        rest = [obj for obj in visit if obj not in selected]
+        rest.sort(key=lambda obj: obj["created"] or datetime.min.replace(tzinfo=timezone.utc))
+        for obj in rest:
+            if remaining < threshold:
+                break
+            selected.append(obj)
+            remaining -= obj["size"]
+            emergency += 1
+    return selected, {
+        "total_bytes": total,
+        "threshold_bytes": threshold,
+        "emergency_files": emergency,
+        "remaining_bytes": max(remaining, 0),
+    }
+
+
+def _records_matching_paths(paths):
+    wanted = set(paths)
+    if not wanted:
+        return [], None
+    offset = 0
+    page_size = 200
+    ids = []
+    pages = 0
+    while pages < 250:
+        pages += 1
+        headers = {**HEADERS, "Range": f"{offset}-{offset + page_size - 1}"}
+        resp = requests.get(
+            f"{SUPABASE_URL}/rest/v1/web_precios",
+            headers=headers,
+            params=[
+                ("select", "id,before_photos,after_photos"),
+                ("order", "created_at.asc"),
+            ],
+            timeout=30,
+        )
+        restricted = _restricted_message(resp)
+        if restricted:
+            return None, restricted
+        if not resp.ok:
+            return None, f"web_precios {resp.status_code}: {(resp.text or '')[:300]}"
+        rows = resp.json()
+        if not rows:
+            break
+        for row in rows:
+            files = _storage_paths_for_photos(row.get("before_photos"), "before")
+            files.extend(_storage_paths_for_photos(row.get("after_photos"), "after"))
+            if any(path in wanted for path in files):
+                if row.get("id") is not None:
+                    ids.append(row["id"])
+        if len(rows) < page_size:
+            break
+        offset += page_size
+    return ids, None
+
+
+def purge_expired_visit_photos():
+    """Borra fotos de más de 2 meses y, si el bucket se acerca al límite, las demás."""
+    cutoff = _photo_cutoff()
+    result = {
+        "cutoff": cutoff.isoformat(),
+        "mode": "storage",
+        "files_deleted": 0,
+        "records_cleared": 0,
+        "emergency_files": 0,
+        "total_bytes": None,
+        "error": None,
+    }
+    objects, error = _list_bucket_files()
+    if error:
+        found, fallback_error = _purge_from_records(cutoff)
+        result["mode"] = "records"
+        if fallback_error:
+            result["error"] = fallback_error
+            return result
+        deleted, delete_error = _delete_storage_paths(found["files"])
+        result["files_deleted"] = deleted
+        if delete_error:
+            result["error"] = delete_error
+            return result
+        if found["record_ids"]:
+            cleared, clear_error = _clear_photo_columns(found["record_ids"])
+            result["records_cleared"] = cleared
+            if clear_error:
+                result["error"] = clear_error
+        return result
+
+    chosen, stats = _select_files_to_delete(objects, cutoff)
+    result.update(stats)
+    paths = [obj["path"] for obj in chosen]
+    deleted, delete_error = _delete_storage_paths(paths)
+    result["files_deleted"] = deleted
+    if delete_error:
+        result["error"] = delete_error
+        return result
+
+    record_ids, clear_lookup_error = _records_matching_paths(paths)
+    if clear_lookup_error:
+        result["error"] = clear_lookup_error
+        return result
+    if record_ids:
+        cleared, clear_error = _clear_photo_columns(record_ids)
+        result["records_cleared"] = cleared
+        if clear_error:
+            result["error"] = clear_error
+    return result
+
+
+def _photo_retention_loop():
+    time.sleep(20)
+    while True:
+        if _PHOTO_PURGE_LOCK.acquire(blocking=False):
+            try:
+                summary = purge_expired_visit_photos()
+                print(f"[fotos] purga {summary}")
+            except Exception as exc:
+                print(f"[fotos] error de purga: {exc}")
+            finally:
+                _PHOTO_PURGE_LOCK.release()
+        time.sleep(24 * 60 * 60)
+
+
+@app.before_request
+def _boot_photo_retention():
+    global _photo_retention_started
+    if _photo_retention_started or os.getenv("PHOTO_RETENTION", "1") == "0":
+        return
+    _photo_retention_started = True
+    threading.Thread(
+        target=_photo_retention_loop, daemon=True, name="photo-retention"
+    ).start()
+
+
 # ─── Entrypoint ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    if "--purgar-fotos" in sys.argv:
+        print(json.dumps(purge_expired_visit_photos(), ensure_ascii=False))
+    else:
+        port = int(os.environ.get("PORT", 10000))
+        app.run(host='0.0.0.0', port=port, debug=False)

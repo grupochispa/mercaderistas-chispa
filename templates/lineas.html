@@ -98,16 +98,18 @@ const db={
   get storage(){ return window.db.storage; }
 };
 const empresaId=localStorage.getItem('empresa_id')||await(async()=>{try{const r=await fetch('/api/dashboard/config');if(r.ok){const d=await r.json();localStorage.setItem('empresa_id',d.empresa_id);localStorage.setItem('empresa_nombre',d.empresa_nombre);return d.empresa_id;}return null;}catch{return null;}})();
-const STORAGE_BASE='https://czykohaerbcfpxenmssj.supabase.co/storage/v1/object/public/planogramas/';
+const STORAGE_BASE='https://fnmjdevxbimprposrhie.supabase.co/storage/v1/object/public/planogramas/';
 if(!empresaId){window.location.replace('/');throw new Error('no session');}
 
 function previewCreate(input){const img=document.getElementById('planogram_preview_create');if(input.files[0]){const r=new FileReader();r.onload=e=>{img.src=e.target.result;img.style.display='block';};r.readAsDataURL(input.files[0]);}else img.style.display='none';}
 function previewEdit(input){const img=document.getElementById('edit_planogram_preview');if(input.files[0]){const r=new FileReader();r.onload=e=>{img.src=e.target.result;img.style.display='block';};r.readAsDataURL(input.files[0]);}else img.style.display='none';}
 
 async function subirPlanograma(file,nombre){
-  const ext=file.name.split('.').pop();
-  const path=`${empresaId}/${nombre.replace(/\s+/g,'_')}_${Date.now()}.${ext}`;
-  const{error}=await db.storage.from('planogramas').upload(path,file,{upsert:true});
+  let comprimida;
+  try { comprimida = await window.captaCompressImage(file); }
+  catch (err) { captaToast(err.message || 'No se pudo comprimir la imagen', 'error'); return null; }
+  const path=`${empresaId}/${nombre.replace(/\s+/g,'_')}_${Date.now()}.jpg`;
+  const{error}=await db.storage.from('planogramas').upload(path,comprimida,{upsert:true,contentType:'image/jpeg'});
   if(error){captaToast('Error subiendo imagen: '+error.message,'error');return null;}
   return path;
 }

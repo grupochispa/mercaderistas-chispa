@@ -28,6 +28,45 @@ window.captaFmtProdTxt = function fmtProdTxt(item) {
   return name ? `${name} — ${suffix}` : suffix;
 };
 
+/**
+ * Reduce una foto antes de subirla: lado mayor 1280 px, JPEG calidad 0.6.
+ * Así el bucket no vuelve a llenarse con la resolución de la cámara.
+ */
+window.captaCompressImage = function captaCompressImage(file, maxEdge = 1280, quality = 0.6) {
+  return new Promise((resolve, reject) => {
+    if (!file || !file.type || !file.type.startsWith('image/')) {
+      reject(new Error('El archivo no es una imagen'));
+      return;
+    }
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
+      const width = Math.max(1, Math.round(img.width * scale));
+      const height = Math.max(1, Math.round(img.height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      canvas.toBlob((blob) => {
+        URL.revokeObjectURL(url);
+        if (!blob) {
+          reject(new Error('No se pudo comprimir la imagen'));
+          return;
+        }
+        const name = (file.name || 'foto').replace(/\.\w+$/, '') + '.jpg';
+        resolve(new File([blob], name, { type: 'image/jpeg' }));
+      }, 'image/jpeg', quality);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('No se pudo leer la imagen'));
+    };
+    img.src = url;
+  });
+};
+
 window.captaFmtDate = function fmtDate(s) {
   if (!s) return '—';
   return new Date(s).toLocaleDateString('es-ES', {

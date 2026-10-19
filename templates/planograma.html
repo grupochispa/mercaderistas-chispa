@@ -307,7 +307,7 @@ const empresaId  = localStorage.getItem('empresa_id');
 if (!empresaId) window.location.replace('/');
 
 // URL de Supabase — hardcodeada para evitar dependencia de variables Jinja2
-const SUPABASE_URL = 'https://czykohaerbcfpxenmssj.supabase.co';
+const SUPABASE_URL = 'https://fnmjdevxbimprposrhie.supabase.co';
 const BUCKET       = 'visits_photos';
 
 // ── Helper: obtener la anon key real desde el cliente ya instanciado
@@ -689,8 +689,6 @@ async function storageDelete(storagePath) {
 async function subirImagen() {
   if (!archivoActual || !lineaActual) return;
 
-  const ext      = (archivoActual.name.split('.').pop() || 'jpg').toLowerCase();
-  const filePath = `planogramas/${empresaId}/planograma_${Date.now()}.${ext}`;
   const progFill = document.getElementById('progressFill');
   const progLbl  = document.getElementById('progressLabel');
   const progWrap = document.getElementById('progressWrap');
@@ -699,9 +697,12 @@ async function subirImagen() {
   prevWrap.classList.add('hidden');
   progWrap.classList.remove('hidden');
   animProgress(progFill, 0, 20, 300);
-  progLbl.textContent = 'Preparando...';
+  progLbl.textContent = 'Reduciendo calidad...';
 
   try {
+    const comprimida = await window.captaCompressImage(archivoActual);
+    const filePath = `planogramas/${empresaId}/planograma_${Date.now()}.jpg`;
+
     // 1. Borrar imagen anterior si existe
     if (lineaActual.planogram_image) {
       animProgress(progFill, 20, 35, 300);
@@ -712,7 +713,7 @@ async function subirImagen() {
     // 2. Subir nueva imagen
     animProgress(progFill, 35, 80, 1000);
     progLbl.textContent = 'Subiendo imagen al servidor...';
-    await storageUpload(filePath, archivoActual);
+    await storageUpload(filePath, comprimida);
 
     // 3. Guardar referencia en la BD
     animProgress(progFill, 80, 93, 300);

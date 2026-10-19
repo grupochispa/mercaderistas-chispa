@@ -372,7 +372,7 @@
 tailwind.config = { darkMode:'class' };
 
 // ── Constantes ────────────────────────────────────────────────────
-const SUPABASE_URL   = 'https://czykohaerbcfpxenmssj.supabase.co';
+const SUPABASE_URL   = 'https://fnmjdevxbimprposrhie.supabase.co';
 const STORAGE_BASE   = `${SUPABASE_URL}/storage/v1/object/public/visits_photos/`;
 const RECORDS_PER_PAGE = 25;
 
@@ -1104,13 +1104,20 @@ function showDetails(group) {
   const allBefore = records.flatMap(r => parseJ(r.before_photos));
   const allAfter  = records.flatMap(r => parseJ(r.after_photos));
 
+  const limiteFotos = new Date();
+  limiteFotos.setMonth(limiteFotos.getMonth() - 2);
+  const fotosVencidas = new Date(group.created_at) < limiteFotos;
+  const sinFotosMsg = fotosVencidas
+    ? 'Estas fotos se eliminaron al superar 2 meses, o antes si el almacenamiento estaba por llenarse. El histórico de la visita se conserva.'
+    : 'Sin fotos registradas.';
+
   const photoSection = (title, photos, tipo) => {
   if (!photos.length) return `
     <div class="modal-section bg-gray-50 dark:bg-slate-700 border border-gray-100 dark:border-slate-600">
       <p class="modal-section-title text-gray-500 dark:text-gray-400">
         <i class="fas fa-camera mr-1"></i>${title}
       </p>
-      <p class="text-sm text-gray-400 italic">Sin fotos registradas.</p>
+      <p class="text-sm text-gray-400 italic">${sinFotosMsg}</p>
     </div>`;
   return `
     <div class="modal-section bg-gray-50 dark:bg-slate-700 border border-gray-100 dark:border-slate-600">
